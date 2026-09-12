@@ -7,14 +7,21 @@ import { ApiError, asId, cleanText, optionalText } from "../utils.js";
 
 export const usersRouter = Router();
 
-usersRouter.get("/", requirePermission("users.manage"), (_req, res) => {
+usersRouter.get("/", requirePermission("users.manage"), (req, res) => {
+  const search = String(req.query.search ?? "").trim();
+  const term = search ? `%${search}%` : null;
   res.json(all(
     `SELECT u.id, u.full_name, u.email, u.role_id, r.name AS role_name, u.student_id,
      st.student_number, TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name,
      u.is_active, u.password_must_change, u.last_login_at, u.created_at
      FROM users u JOIN roles r ON r.id = u.role_id
      LEFT JOIN students st ON st.id = u.student_id
-     WHERE u.deleted_at IS NULL ORDER BY u.full_name`
+     WHERE u.deleted_at IS NULL
+       AND (? IS NULL OR u.full_name LIKE ? OR u.email LIKE ? OR r.name LIKE ?
+            OR st.student_number LIKE ?
+            OR TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) LIKE ?)
+     ORDER BY u.full_name`,
+    term, term, term, term, term, term
   ));
 });
 

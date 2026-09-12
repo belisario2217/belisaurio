@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import {
-  Award, ClipboardCheck, FileSpreadsheet, FileText, GraduationCap, Printer,
-  Save, Sheet, Trash2, UserRoundX, UsersRound
+  Award, Check, ClipboardCheck, FileSpreadsheet, FileText, GraduationCap, ListFilter, Printer,
+  Save, Sheet, SlidersHorizontal, Trash2, UserRoundX, UsersRound
 } from "lucide-react";
 import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Button, Field, Select } from "../components/Ui";
+import { Modal } from "../components/Modal";
 
 type Option = { id: number; name: string };
 type Plan = { id: number; code: string; name: string; is_active: number };
@@ -36,7 +37,7 @@ type CurricularDraft = {
 };
 
 const reports = [
-  { type: "students", title: "Lista de alumnos", description: "Directorio por grupo con programa, turno y estatus.", icon: UsersRound },
+  { type: "students", title: "Lista general de alumnos", description: "Directorio limpio por grupo con campos seleccionables.", icon: UsersRound },
   { type: "attendance", title: "Lista de asistencia", description: "Plantilla institucional por grupo, materia y docente, lista para imprimir.", icon: ClipboardCheck },
   { type: "gradebook", title: "Concentrado de calificaciones", description: "Resultados por alumno, materia y periodo.", icon: Sheet },
   { type: "subjects", title: "Reporte por materia", description: "Promedio, evaluaciones e indice de reprobacion.", icon: FileText },
@@ -44,6 +45,15 @@ const reports = [
   { type: "failed", title: "Alumnos reprobados", description: "Resultados bajo el minimo aprobatorio.", icon: UserRoundX },
   { type: "outstanding", title: "Alumnos destacados", description: "Promedios generales iguales o superiores a 9.", icon: Award }
 ];
+
+const studentListFields = [
+  ["matricula", "Matrícula"], ["nombre_completo", "Nombre completo"], ["nombre", "Nombre"],
+  ["apellido_paterno", "Apellido paterno"], ["apellido_materno", "Apellido materno"], ["curp", "CURP"],
+  ["fecha_nacimiento", "Fecha de nacimiento"], ["correo", "Correo"], ["telefono", "Teléfono"],
+  ["programa", "Programa"], ["turno", "Turno"], ["grupo", "Grupo"], ["ciclo", "Ciclo"],
+  ["periodo", "Periodo"], ["estatus", "Estatus"]
+] as const;
+const defaultStudentListFields = ["matricula", "nombre_completo", "programa", "turno", "grupo", "estatus"];
 
 export function ReportsPage() {
   const { can } = useAuth();
@@ -67,6 +77,27 @@ export function ReportsPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [studentListOpen, setStudentListOpen] = useState(false);
+  const [selectedStudentFields, setSelectedStudentFields] = useState<string[]>(defaultStudentListFields);
+
+  function openStudentListCustomizer() {
+    setSelectedStudentFields(defaultStudentListFields);
+    setStudentListOpen(true);
+  }
+
+  function toggleStudentField(field: string) {
+    setSelectedStudentFields((current) => current.includes(field)
+      ? current.filter((item) => item !== field)
+      : current.length >= 8 ? current : [...current, field]);
+  }
+
+  function exportStudentList(format: "pdf" | "xlsx") {
+    const query = new URLSearchParams({ format, fields: selectedStudentFields.join(",") });
+    if (groupId) query.set("groupId", groupId);
+    if (format === "pdf") openDocument(`/reports/student-list?${query}`);
+    else download(`/reports/student-list?${query}`, "lista-alumnos.xlsx");
+    setStudentListOpen(false);
+  }
 
   function draftFromRow(row: CurricularSubject): CurricularDraft {
     return {
@@ -349,13 +380,31 @@ export function ReportsPage() {
                 </div>}
               </div>
               <div className="report-actions">
-                <button title="Abrir PDF" onClick={() => openDocument(reportPath(report.type, "pdf"))}><FileText size={17} /><span>PDF</span></button>
-                <button title="Descargar Excel" onClick={() => download(reportPath(report.type, "xlsx"), `${report.type}.xlsx`)}><FileSpreadsheet size={17} /><span>Excel</span></button>
+                {report.type === "students" ? <>
+                  <button title="Abrir lista limpia" onClick={() => exportStudentList("pdf")}><ListFilter size={17} /><span>Lista limpia</span></button>
+                  <button title="Descargar Excel" onClick={() => exportStudentList("xlsx")}><FileSpreadsheet size={17} /><span>Excel</span></button>
+                  <button title="Personalizar campos" onClick={openStudentListCustomizer}><SlidersHorizontal size={17} /><span>Personalizar</span></button>
+                </> : <>
+                  <button title="Abrir PDF" onClick={() => openDocument(reportPath(report.type, "pdf"))}><FileText size={17} /><span>PDF</span></button>
+                  <button title="Descargar Excel" onClick={() => download(reportPath(report.type, "xlsx"), `${report.type}.xlsx`)}><FileSpreadsheet size={17} /><span>Excel</span></button>
+                </>}
               </div>
             </article>
           ))}
         </div>
       </section>
+
+      <Modal open={studentListOpen} onClose={() => setStudentListOpen(false)} title="Personalizar lista de alumnos" size="small">
+        <div className="custom-list-intro"><SlidersHorizontal size={20} /><p>Elige hasta 8 campos para generar una lista clara y útil. El grupo seleccionado se conservará como filtro.</p></div>
+        <div className="student-list-field-grid">
+          {studentListFields.map(([value, label]) => {
+            const selected = selectedStudentFields.includes(value);
+            return <button type="button" className={`student-list-field ${selected ? "selected" : ""}`} key={value} onClick={() => toggleStudentField(value)}><span>{label}</span>{selected && <Check size={16} />}</button>;
+          })}
+        </div>
+        <p className="form-hint">{selectedStudentFields.length} de 8 campos seleccionados.</p>
+        <div className="modal-actions"><Button type="button" variant="ghost" onClick={() => setStudentListOpen(false)}>Cancelar</Button><Button type="button" icon={<FileText size={17} />} onClick={() => exportStudentList("pdf")} disabled={!selectedStudentFields.length}>Generar PDF</Button><Button type="button" icon={<FileSpreadsheet size={17} />} onClick={() => exportStudentList("xlsx")} disabled={!selectedStudentFields.length}>Descargar Excel</Button></div>
+      </Modal>
     </div>
   );
 }

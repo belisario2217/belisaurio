@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, KeyRound, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserCog, UsersRound } from "lucide-react";
+import { Eye, KeyRound, Pencil, Plus, Search, ShieldCheck, Trash2, TriangleAlert, UserCog, UsersRound } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
@@ -38,10 +38,12 @@ export function UsersPage() {
   const [resetResult, setResetResult] = useState<{ email: string; temporaryPassword: string } | null>(null);
   const [deleting, setDeleting] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
 
-  async function load() {
+  async function load(searchTerm = search) {
+    const query = searchTerm.trim() ? `?search=${encodeURIComponent(searchTerm.trim())}` : "";
     const [userRows, roleRows, students] = await Promise.all([
-      api<User[]>("/users"),
+      api<User[]>(`/users${query}`),
       api<Role[]>("/users/roles/list"),
       api<Array<{ id: number; name: string }>>("/users/student-options")
     ]);
@@ -49,7 +51,10 @@ export function UsersPage() {
     setRoles(roleRows);
     setStudentOptions(students);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { load(search).catch(() => undefined); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   function createUser() {
     setEditing(null);
@@ -73,7 +78,7 @@ export function UsersPage() {
       });
       toast.success(editing ? "Usuario actualizado." : "Usuario creado.");
       setUserOpen(false);
-      load();
+      load(search);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No fue posible guardar.");
     } finally { setBusy(false); }
@@ -86,7 +91,7 @@ export function UsersPage() {
       await api("/users/roles", { method: "POST", body: roleForm });
       toast.success("Rol creado.");
       setRoleOpen(false);
-      load();
+      load(search);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No fue posible crear el rol.");
     } finally { setBusy(false); }
@@ -109,7 +114,7 @@ export function UsersPage() {
       });
       toast.success("Permisos actualizados.");
       setPermissionsOpen(false);
-      load();
+      load(search);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No fue posible actualizar.");
     } finally { setBusy(false); }
@@ -122,7 +127,7 @@ export function UsersPage() {
       const result = await api<{ email: string; temporaryPassword: string }>(`/users/${resetting.id}/reset-student-password`, { method: "POST" });
       setResetResult(result);
       toast.success("Contraseña del alumno restablecida.");
-      load();
+      load(search);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No fue posible restablecer la contraseña.");
     } finally {
@@ -151,7 +156,7 @@ export function UsersPage() {
       await api(`/users/${deleting.id}`, { method: "DELETE" });
       toast.success("Cuenta de acceso eliminada.");
       setDeleting(null);
-      await load();
+      await load(search);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No fue posible eliminar la cuenta.");
     } finally {
@@ -173,7 +178,7 @@ export function UsersPage() {
       </div>
       {tab === "users" ? (
         <section className="table-section">
-          <header className="section-heading"><div><span>Acceso</span><h2>Cuentas del sistema</h2></div><Button icon={<Plus size={18} />} onClick={createUser}>Nuevo usuario</Button></header>
+          <header className="section-heading"><div><span>Acceso</span><h2>Cuentas del sistema</h2></div><div className="section-heading-tools"><label className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar usuario, correo o rol" /></label><Button icon={<Plus size={18} />} onClick={createUser}>Nuevo usuario</Button></div></header>
           <div className="table-wrap"><table><thead><tr><th>Usuario</th><th>Rol</th><th>Alumno vinculado</th><th>Último acceso</th><th>Estado</th><th aria-label="Acciones" /></tr></thead><tbody>
             {users.map((user) => <tr key={user.id}><td><div className="person-cell"><div className="mini-avatar">{user.full_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><strong>{user.full_name}</strong><span>{user.email}</span></div></div></td><td><span className="role-chip">{user.role_name}</span></td><td>{user.student_name ? <><strong className="table-main">{user.student_name}</strong><span className="table-sub">{user.student_number}{user.password_must_change ? " · Contraseña temporal" : " · Contraseña personalizada"}</span></> : <span className="muted-cell">No aplica</span>}</td><td>{user.last_login_at ? new Date(user.last_login_at).toLocaleString("es-MX") : "Sin acceso"}</td><td><StatusBadge active={Boolean(user.is_active)} /></td><td><div className="split-actions">{user.student_id && <button title="Ver credenciales del alumno" onClick={() => openStudentCredentials(user)}><Eye size={17} /></button>}{user.student_id && <button title="Restablecer contraseña del alumno" onClick={() => { setResetting(user); setResetResult(null); }}><KeyRound size={17} /></button>}<button title="Editar usuario" onClick={() => editUser(user)}><Pencil size={17} /></button>{user.id !== sessionUser?.id && <button title="Eliminar cuenta de acceso" onClick={() => setDeleting(user)}><Trash2 size={17} /></button>}</div></td></tr>)}
           </tbody></table></div>

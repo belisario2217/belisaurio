@@ -7,9 +7,61 @@ import { syncGroupSubjects } from "../services/group-subjects.js";
 import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
 import { sendStudyCertificate } from "../services/study-certificate.js";
 import { institutionLogoFile } from "../services/institution-logo.js";
-import { ApiError, asId, asNumber, cleanText, optionalText } from "../utils.js";
+import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 
 export const reportsRouter = Router();
+
+const studentListFieldDefinitions = {
+  matricula: { label: "Matrícula", expression: "st.student_number" },
+  nombre: { label: "Nombre", expression: "st.first_name" },
+  apellido_paterno: { label: "Apellido paterno", expression: "st.last_name" },
+  apellido_materno: { label: "Apellido materno", expression: "COALESCE(st.second_last_name, '')" },
+  nombre_completo: { label: "Alumno", expression: "TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, ''))" },
+  curp: { label: "CURP", expression: "COALESCE(st.curp, '')" },
+  fecha_nacimiento: { label: "Fecha de nacimiento", expression: "COALESCE(st.birth_date, '')" },
+  correo: { label: "Correo", expression: "COALESCE(st.email, '')" },
+  telefono: { label: "Teléfono", expression: "COALESCE(st.phone, '')" },
+  programa: { label: "Programa", expression: "COALESCE(p.name, '')" },
+  turno: { label: "Turno", expression: "COALESCE(sh.name, '')" },
+  grupo: { label: "Grupo", expression: "COALESCE(g.name, '')" },
+  ciclo: { label: "Ciclo", expression: "COALESCE(sc.name, '')" },
+  periodo: { label: "Periodo", expression: "COALESCE(ap.name, '')" },
+  estatus: { label: "Estatus", expression: "COALESCE(ss.name, '')" }
+} as const;
+
+type StudentListField = keyof typeof studentListFieldDefinitions;
+const defaultStudentListFields: StudentListField[] = ["matricula", "nombre_completo", "programa", "turno", "grupo", "estatus"];
+
+function resolveStudentListFields(input: unknown) {
+  const requested = String(input ?? "").split(",").map((value) => value.trim())
+    .filter((value): value is StudentListField => value in studentListFieldDefinitions);
+  const unique = [...new Set(requested)];
+  return (unique.length ? unique : defaultStudentListFields).slice(0, 8);
+}
+
+function studentListRows(groupId?: number, fields = defaultStudentListFields) {
+  const selected = fields.map((field) => studentListFieldDefinitions[field]);
+  const columns = selected.map((field, index) => `${field.expression} AS "${fields[index]}"`).join(",\n      ");
+  return all<any>(
+    `WITH latest_enrollments AS (
+       SELECT e.* FROM enrollments e
+       WHERE e.is_active = 1
+         AND e.id = (SELECT e2.id FROM enrollments e2 WHERE e2.student_id = e.student_id AND e2.is_active = 1 ORDER BY e2.id DESC LIMIT 1)
+     )
+     SELECT ${columns}
+     FROM students st
+     JOIN student_statuses ss ON ss.id = st.status_id
+     LEFT JOIN latest_enrollments e ON e.student_id = st.id
+     LEFT JOIN programs p ON p.id = e.program_id
+     LEFT JOIN shifts sh ON sh.id = e.shift_id
+     LEFT JOIN groups g ON g.id = e.group_id
+     LEFT JOIN school_cycles sc ON sc.id = e.cycle_id
+     LEFT JOIN academic_periods ap ON ap.id = e.period_id
+     WHERE (? IS NULL OR e.group_id = ?)
+     ORDER BY COALESCE(g.name, ''), st.last_name, st.first_name, st.second_last_name`,
+    groupId ?? null, groupId ?? null
+  );
+}
 
 function groupByCycle(records: any[]) {
   return records.reduce<Record<string, any[]>>((grouped, record) => {
@@ -632,6 +684,29 @@ reportsRouter.delete("/curricular-subjects/:id", requirePermission("reports.gene
   run("DELETE FROM student_subjects WHERE id = ?", id);
   logActivity(req, "delete-curricular-subject", "student_subjects", id, current);
   res.status(204).end();
+});
+
+reportsRouter.get("/student-list", requirePermission("reports.view"), (req, res) => {
+  const fields = resolveStudentListFields(req.query.fields);
+  const groupId = req.query.groupId ? asId(req.query.groupId, "Grupo") : undefined;
+  const rows = studentListRows(groupId, fields);
+  const records = rows.map((row) => Object.fromEntries(fields.map((field) => [studentListFieldDefinitions[field].label, row[field] ?? ""])));
+  const format = cleanText(req.query.format || "pdf", 10).toLowerCase();
+  if (format === "xlsx") return sendWorkbook(res, "lista-alumnos.xlsx", "Alumnos", records);
+  if (format === "csv") return sendCsv(res, "lista-alumnos.csv", Object.keys(records[0] ?? {}), records.map((row) => Object.values(row)));
+
+  const doc = createPdf(res, "lista-alumnos.pdf", { layout: "landscape" });
+  const group = groupId ? get<{ name: string }>("SELECT name FROM groups WHERE id = ?", groupId)?.name : null;
+  const title = group ? `Lista general de alumnos · ${group}` : "Lista general de alumnos";
+  doc.fillColor("#102a43").font("Helvetica-Bold").fontSize(19).text(title);
+  doc.moveDown(0.2).fillColor("#627d98").font("Helvetica").fontSize(9)
+    .text(`${rows.length} alumno${rows.length === 1 ? "" : "s"} · Formato de directorio institucional · ${new Date().toLocaleString("es-MX")}`);
+  doc.moveDown();
+  const available = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const weights = fields.map((field) => ["nombre_completo", "nombre", "apellido_paterno", "apellido_materno"].includes(field) ? 1.7 : ["programa", "correo", "curp"].includes(field) ? 1.45 : 1);
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+  pdfTable(doc, fields.map((field) => studentListFieldDefinitions[field].label), rows.map((row) => fields.map((field) => row[field] ?? "")), weights.map((weight) => available * weight / totalWeight));
+  doc.end();
 });
 
 const reportDefinitions = {

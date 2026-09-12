@@ -497,6 +497,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .report-actions { grid-column: 1 / -1; display: flex; gap: 7px; }
 .report-actions button { min-height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 10px; color: #486581; background: #f4f7f9; border: 1px solid var(--line); border-radius: 4px; font-size: 10px; font-weight: 600; }
 .report-actions button:hover { color: var(--blue); background: #edf5f8; }
+.section-heading-tools { display: flex; align-items: center; gap: 10px; }
+.section-heading-tools .search-box { width: 235px; }
+.custom-list-intro { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 11px 12px; color: #486581; background: #f4f7f9; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; line-height: 1.5; }
+.custom-list-intro svg { flex: 0 0 auto; color: var(--blue); }
+.student-list-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.student-list-field { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; color: #486581; background: white; border: 1px solid var(--line); border-radius: 4px; font-size: 10px; text-align: left; }
+.student-list-field:hover, .student-list-field.selected { color: var(--blue); background: #edf5f8; border-color: #9fc7d6; }
+.student-list-field.selected svg { color: var(--green); }
 
 .plans-layout { min-height: calc(100vh - 112px); display: grid; grid-template-columns: 285px minmax(0, 1fr); background: white; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .plans-pane { border-right: 1px solid var(--line); background: #f8fafb; }
@@ -731,6 +739,10 @@ tbody tr:last-child td { border-bottom: 0; }
   .subject-health-grid { grid-template-columns: 1fr; }
   .overview-strip { align-items: flex-start; flex-direction: column; gap: 12px; }
   .toolbar-primary, .toolbar-actions { flex-wrap: wrap; }
+  .section-heading-tools { width: 100%; align-items: stretch; flex-direction: column; }
+  .section-heading-tools .search-box { width: 100%; }
+  .section-heading-tools .button { width: 100%; }
+  .student-list-field-grid { grid-template-columns: 1fr; }
   .toolbar-primary .search-box, .toolbar-primary select { width: 100%; }
   .toolbar-actions { justify-content: flex-start; }
   .form-grid.two, .form-grid.three, .criteria-grid { grid-template-columns: 1fr; }
