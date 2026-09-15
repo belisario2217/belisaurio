@@ -71,6 +71,38 @@ function groupByCycle(records: any[]) {
   }, {});
 }
 
+function ensureAcademicPeriod(cycleId: number) {
+  const activePeriod = get<{ id: number }>(
+    "SELECT id FROM academic_periods WHERE cycle_id = ? AND is_active = 1 ORDER BY sequence, id LIMIT 1",
+    cycleId
+  );
+  if (activePeriod) return activePeriod;
+
+  const inactivePeriod = get<{ id: number }>(
+    "SELECT id FROM academic_periods WHERE cycle_id = ? ORDER BY sequence, id LIMIT 1",
+    cycleId
+  );
+  if (inactivePeriod) {
+    run("UPDATE academic_periods SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?", inactivePeriod.id);
+    return inactivePeriod;
+  }
+
+  const cycle = get<{ start_date: string; end_date: string }>(
+    "SELECT start_date, end_date FROM school_cycles WHERE id = ? AND is_active = 1",
+    cycleId
+  );
+  if (!cycle) throw new ApiError(400, "El ciclo escolar seleccionado no existe o está inactivo.");
+
+  const result = run(
+    `INSERT INTO academic_periods(cycle_id, name, sequence, start_date, end_date, grade_entry_open, is_active)
+     VALUES (?, 'Periodo general', 1, ?, ?, 1, 1)`,
+    cycleId,
+    cycle.start_date,
+    cycle.end_date
+  );
+  return { id: Number(result.lastInsertRowid) };
+}
+
 function drawGradeSection(doc: PDFKit.PDFDocument, title: string, records: any[], primary: string) {
   if (!records.length) return;
   if (doc.y > 660) doc.addPage();
@@ -88,16 +120,14 @@ function drawGradeSection(doc: PDFKit.PDFDocument, title: string, records: any[]
 
 function defaultAcademicContext(groupId: number, cycleId: number | null) {
   const group = get<any>(
-    `SELECT g.id, g.cycle_id, e.period_id
+    `SELECT g.id, g.cycle_id, g.active_cycle_id, e.period_id
      FROM groups g
      LEFT JOIN enrollments e ON e.group_id = g.id AND e.is_active = 1
      WHERE g.id = ? ORDER BY e.id DESC LIMIT 1`,
     groupId
   );
-  const effectiveCycleId = cycleId ?? group?.cycle_id ?? null;
-  const period = effectiveCycleId
-    ? get<{ id: number }>("SELECT id FROM academic_periods WHERE cycle_id = ? AND is_active = 1 ORDER BY sequence, id LIMIT 1", effectiveCycleId)
-    : null;
+  const effectiveCycleId = group?.active_cycle_id ?? group?.cycle_id ?? cycleId ?? null;
+  const period = effectiveCycleId ? ensureAcademicPeriod(effectiveCycleId) : null;
   const fallbackPeriod = group?.period_id
     ? get<{ id: number }>("SELECT id FROM academic_periods WHERE id = ?", group.period_id)
     : null;
@@ -496,13 +526,20 @@ reportsRouter.post("/curricular-subjects/bulk", requirePermission("reports.gener
   const groupId = asId(req.body.groupId, "Grupo");
   const semester = Math.max(1, Math.trunc(asNumber(req.body.semester || 1, "Semestre")));
   const planId = req.body.planId ? asId(req.body.planId, "Plan") : null;
-  const cycleId = req.body.cycleId ? asId(req.body.cycleId, "Ciclo escolar") : null;
+  const requestedCycleId = req.body.cycleId ? asId(req.body.cycleId, "Ciclo escolar") : null;
   const initialStatus = ["pending", "in_progress", "completed"].includes(String(req.body.status))
     ? String(req.body.status)
     : "in_progress";
   const subjectIds = Array.isArray(req.body.subjectIds)
     ? req.body.subjectIds.map((id: unknown) => asId(id, "Materia"))
     : [];
+  const group = get<{ id: number; cycle_id: number; active_cycle_id: number | null }>(
+    "SELECT id, cycle_id, active_cycle_id FROM groups WHERE id = ? AND is_active = 1",
+    groupId
+  );
+  if (!group) throw new ApiError(404, "El grupo no existe o está inactivo.");
+  const cycleId = group.active_cycle_id ?? group.cycle_id ?? requestedCycleId;
+  if (!cycleId) throw new ApiError(400, "El grupo seleccionado no tiene un ciclo escolar.");
   const enrollments = all<any>(
     `SELECT e.id, e.student_id, e.plan_id, e.cycle_id
      FROM enrollments e JOIN students st ON st.id = e.student_id
@@ -532,7 +569,7 @@ reportsRouter.post("/curricular-subjects/bulk", requirePermission("reports.gener
           effectivePlanId, semester
         );
       subjects.forEach((subject) => {
-        ensureGradeAssignment(groupId, subject.subject_id, cycleId ?? enrollment.cycle_id);
+        ensureGradeAssignment(groupId, subject.subject_id, cycleId);
         const result = run(
           `INSERT INTO student_subjects(student_id, enrollment_id, plan_id, subject_id, school_cycle_id,
            semester_number, subject_type, credits, status)
@@ -544,7 +581,7 @@ reportsRouter.post("/curricular-subjects/bulk", requirePermission("reports.gener
           enrollment.id,
           effectivePlanId,
           subject.subject_id,
-          cycleId ?? enrollment.cycle_id,
+          cycleId,
           semester,
           subject.subject_type,
           subject.credits,

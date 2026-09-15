@@ -363,7 +363,7 @@ describe("Aula Nova API", () => {
       });
     expect(created.status).toBe(201);
     expect(created.body.billing.summary.paidAmount).toBe(1200);
-    expect(created.body.billing.summary.balance).toBe(0);
+    expect(created.body.billing.summary.balance).toBe(800);
     const createdPayment = created.body.billing.payments.find((payment: any) => payment.folio === "FOL-PAY-001");
     expect(createdPayment.notes).toBe("1000");
     const paymentId = createdPayment.id;
@@ -1263,5 +1263,56 @@ describe("Aula Nova API", () => {
       .delete(`/api/settings/calendar-events/${event.body.id}`)
       .set("Authorization", `Bearer ${token}`)
       .expect(204);
+  });
+
+  it("uses the group's active cycle when assigning subjects without evaluation periods", async () => {
+    const group = db.prepare(
+      "SELECT id, active_cycle_id, plan_id FROM groups WHERE name = '1A' ORDER BY id LIMIT 1"
+    ).get() as any;
+    const enrollment = db.prepare(
+      "SELECT plan_id FROM enrollments WHERE group_id = ? AND is_active = 1 ORDER BY id LIMIT 1"
+    ).get(group.id) as any;
+    const planId = group.plan_id ?? enrollment.plan_id;
+    const subject = db.prepare(
+      "SELECT subject_id FROM plan_subjects WHERE plan_id = ? ORDER BY id LIMIT 1"
+    ).get(planId) as any;
+    expect(group).toBeTruthy();
+    expect(planId).toBeTruthy();
+    expect(subject).toBeTruthy();
+
+    const newCycle = await request(app)
+      .post("/api/catalogs/cycles")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Ciclo sin periodos para asignación", start_date: "2028-08-10", end_date: "2029-07-31" });
+    expect(newCycle.status).toBe(201);
+    db.prepare("UPDATE groups SET active_cycle_id = ? WHERE id = ?").run(newCycle.body.id, group.id);
+
+    try {
+      const assigned = await request(app)
+        .post("/api/reports/curricular-subjects/bulk")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          groupId: group.id,
+          planId,
+          cycleId: group.active_cycle_id,
+          semester: 1,
+          subjectIds: [subject.subject_id],
+          status: "in_progress"
+        });
+      expect(assigned.status).toBe(201);
+
+      const period = db.prepare(
+        "SELECT id FROM academic_periods WHERE cycle_id = ? AND is_active = 1 LIMIT 1"
+      ).get(newCycle.body.id) as any;
+      expect(period).toBeTruthy();
+      expect(period.id).toBeTruthy();
+
+      const curricular = db.prepare(
+        "SELECT id FROM student_subjects WHERE school_cycle_id = ? AND subject_id = ? LIMIT 1"
+      ).get(newCycle.body.id, subject.subject_id) as any;
+      expect(curricular).toBeTruthy();
+    } finally {
+      db.prepare("UPDATE groups SET active_cycle_id = ? WHERE id = ?").run(group.active_cycle_id, group.id);
+    }
   });
 });

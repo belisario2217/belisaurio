@@ -9,7 +9,7 @@ import { useToast } from "../components/Toast";
 import { Button, Field, Select } from "../components/Ui";
 import { Modal } from "../components/Modal";
 
-type Option = { id: number; name: string };
+type Option = { id: number; name: string; active_cycle_id?: number; plan_id?: number };
 type Plan = { id: number; code: string; name: string; is_active: number };
 type PlanSubject = { subject_id: number; code: string; name: string; recommended_period: number };
 type CurricularSubject = {
@@ -79,6 +79,12 @@ export function ReportsPage() {
   });
   const [studentListOpen, setStudentListOpen] = useState(false);
   const [selectedStudentFields, setSelectedStudentFields] = useState<string[]>(defaultStudentListFields);
+
+  function selectGroup(value: string) {
+    setGroupId(value);
+    const group = (options.groups ?? []).find((item) => String(item.id) === value);
+    if (group?.active_cycle_id) setCycleId(String(group.active_cycle_id));
+  }
 
   function openStudentListCustomizer() {
     setSelectedStudentFields(defaultStudentListFields);
@@ -150,7 +156,12 @@ export function ReportsPage() {
   useEffect(() => {
     Promise.all(["groups", "periods", "cycles"].map(async (type) => {
       const result = await api<{ records: any[] }>(`/catalogs/${type}`);
-      return [type, result.records.filter((item) => item.is_active).map((item) => ({ id: item.id, name: item.name }))] as const;
+      return [type, result.records.filter((item) => item.is_active).map((item) => ({
+        id: item.id,
+        name: item.name,
+        active_cycle_id: item.active_cycle_id,
+        plan_id: item.plan_id
+      }))] as const;
     })).then((entries) => setOptions(Object.fromEntries(entries)));
     api<{ records: any[] }>("/students?pageSize=100").then((result) =>
       setOptions((current) => ({ ...current, students: result.records.map((student) => ({ id: student.id, name: `${student.student_number} - ${student.full_name}` })) }))
@@ -207,11 +218,15 @@ export function ReportsPage() {
     if (!planId) return toast.error("Selecciona el plan academico.");
     const subjectIds = planSubjects.filter((subject) => String(subject.recommended_period) === semester).map((subject) => subject.subject_id);
     if (!subjectIds.length) return toast.error("Ese semestre no tiene materias en el plan seleccionado.");
+    const group = (options.groups ?? []).find((item) => String(item.id) === groupId);
+    const effectiveCycleId = group?.active_cycle_id ? String(group.active_cycle_id) : cycleId;
+    if (!effectiveCycleId) return toast.error("El grupo seleccionado no tiene un ciclo escolar activo.");
+    if (effectiveCycleId !== cycleId) setCycleId(effectiveCycleId);
     setBusy(true);
     try {
       const result = await api<{ count: number }>("/reports/curricular-subjects/bulk", {
         method: "POST",
-        body: { groupId, planId, cycleId: cycleId || undefined, semester, subjectIds, status: initialStatus }
+        body: { groupId, planId, cycleId: effectiveCycleId, semester, subjectIds, status: initialStatus }
       });
       toast.success(`Materias aplicadas al grupo. Registros actualizados: ${result.count}.`);
       await loadCurricularRows();
@@ -312,7 +327,7 @@ export function ReportsPage() {
         </div>
         <div className="report-builder-controls">
           <Field label="Alumno"><Select options={options.students ?? []} value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="Seleccionar alumno" /></Field>
-          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="Seleccionar grupo" /></Field>
+          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Seleccionar grupo" /></Field>
           <Field label="Periodo"><Select options={options.periods ?? []} value={periodId} onChange={(event) => setPeriodId(event.target.value)} placeholder="Todos los periodos" /></Field>
           <div className="builder-buttons"><Button variant="secondary" icon={<Printer size={17} />} onClick={() => reportCard("student")}>Boleta individual</Button><Button variant="secondary" icon={<FileText size={17} />} onClick={studyCertificate}>Constancia de estudios</Button><Button icon={<Sheet size={17} />} onClick={() => reportCard("group")}>Boletas por grupo</Button></div>
         </div>
@@ -323,7 +338,7 @@ export function ReportsPage() {
           <div><span>Carga académica por grupo</span><h2>Materias asignadas al grupo</h2><p>La materia y el docente se asignan al grupo; cada alumno nuevo recibe automáticamente esta carga.</p></div>
         </div>
         <div className="curricular-controls">
-          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="Seleccionar grupo" /></Field>
+          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Seleccionar grupo" /></Field>
           <Field label="Alumno"><Select options={options.students ?? []} value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="Todos" /></Field>
           <Field label="Plan"><Select options={plans.map((plan) => ({ id: plan.id, name: `${plan.code} - ${plan.name}` }))} value={planId} onChange={(event) => setPlanId(event.target.value)} placeholder="Seleccionar plan" /></Field>
           <Field label="Semestre"><input type="number" min="1" value={semester} onChange={(event) => setSemester(event.target.value || "1")} /></Field>
@@ -367,7 +382,7 @@ export function ReportsPage() {
       </section>
 
       <section>
-        <div className="section-heading standalone"><div><span>Formatos operativos</span><h2>Reportes disponibles</h2></div><Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="Todos los grupos" /></Field></div>
+        <div className="section-heading standalone"><div><span>Formatos operativos</span><h2>Reportes disponibles</h2></div><Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Todos los grupos" /></Field></div>
         <div className="report-grid">
           {reports.map((report) => (
             <article className="report-item" key={report.type}>
