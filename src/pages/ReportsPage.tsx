@@ -317,6 +317,33 @@ export function ReportsPage() {
 
   const semesterSubjects = planSubjects.filter((subject) => String(subject.recommended_period) === semester);
   const changedRowsCount = curricularRows.filter((row) => isDraftChanged(row)).length;
+  const listReports = reports.filter((report) => report.type === "students" || report.type === "attendance");
+  const academicReports = reports.filter((report) => report.type !== "students" && report.type !== "attendance");
+
+  function renderReportItem(report: (typeof reports)[number]) {
+    return (
+      <article className="report-item" key={report.type}>
+        <div className="report-item-icon"><report.icon size={23} /></div>
+        <div>
+          <h3>{report.title}</h3><p>{report.description}</p>
+          {report.type === "attendance" && <div className="attendance-report-options">
+            <label>Modalidad<select value={attendanceMode} onChange={(event) => setAttendanceMode(event.target.value)}><option value="escolarizado">Escolarizado</option><option value="semiescolarizado">Semiescolarizado</option><option value="complementario">Complementario</option></select></label>
+            <label>Mes<input type="month" value={attendanceMonth} onChange={(event) => setAttendanceMonth(event.target.value)} /></label>
+          </div>}
+        </div>
+        <div className="report-actions">
+          {report.type === "students" ? <>
+            <button title="Abrir lista limpia" onClick={() => exportStudentList("pdf")}><ListFilter size={17} /><span>Lista limpia</span></button>
+            <button title="Descargar Excel" onClick={() => exportStudentList("xlsx")}><FileSpreadsheet size={17} /><span>Excel</span></button>
+            <button title="Personalizar campos" onClick={openStudentListCustomizer}><SlidersHorizontal size={17} /><span>Personalizar</span></button>
+          </> : <>
+            <button title="Abrir PDF" onClick={() => openDocument(reportPath(report.type, "pdf"))}><FileText size={17} /><span>PDF</span></button>
+            <button title="Descargar Excel" onClick={() => download(reportPath(report.type, "xlsx"), `${report.type}.xlsx`)}><FileSpreadsheet size={17} /><span>Excel</span></button>
+          </>}
+        </div>
+      </article>
+    );
+  }
 
   return (
     <div className="page-stack">
@@ -381,32 +408,20 @@ export function ReportsPage() {
         </div>
       </section>
 
-      <section>
-        <div className="section-heading standalone"><div><span>Formatos operativos</span><h2>Reportes disponibles</h2></div><Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Todos los grupos" /></Field></div>
-        <div className="report-grid">
-          {reports.map((report) => (
-            <article className="report-item" key={report.type}>
-              <div className="report-item-icon"><report.icon size={23} /></div>
-              <div>
-                <h3>{report.title}</h3><p>{report.description}</p>
-                {report.type === "attendance" && <div className="attendance-report-options">
-                  <label>Modalidad<select value={attendanceMode} onChange={(event) => setAttendanceMode(event.target.value)}><option value="escolarizado">Escolarizado</option><option value="semiescolarizado">Semiescolarizado</option><option value="complementario">Complementario</option></select></label>
-                  <label>Mes<input type="month" value={attendanceMonth} onChange={(event) => setAttendanceMonth(event.target.value)} /></label>
-                </div>}
-              </div>
-              <div className="report-actions">
-                {report.type === "students" ? <>
-                  <button title="Abrir lista limpia" onClick={() => exportStudentList("pdf")}><ListFilter size={17} /><span>Lista limpia</span></button>
-                  <button title="Descargar Excel" onClick={() => exportStudentList("xlsx")}><FileSpreadsheet size={17} /><span>Excel</span></button>
-                  <button title="Personalizar campos" onClick={openStudentListCustomizer}><SlidersHorizontal size={17} /><span>Personalizar</span></button>
-                </> : <>
-                  <button title="Abrir PDF" onClick={() => openDocument(reportPath(report.type, "pdf"))}><FileText size={17} /><span>PDF</span></button>
-                  <button title="Descargar Excel" onClick={() => download(reportPath(report.type, "xlsx"), `${report.type}.xlsx`)}><FileSpreadsheet size={17} /><span>Excel</span></button>
-                </>}
-              </div>
-            </article>
-          ))}
+      <section className="reports-section">
+        <div className="section-heading standalone">
+          <div><span>Listas operativas</span><h2>Listas y controles</h2><p>Formatos rápidos para consulta, asistencia y trabajo diario.</p></div>
+          <Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Todos los grupos" /></Field>
         </div>
+        <div className="report-grid">{listReports.map(renderReportItem)}</div>
+      </section>
+
+      <section className="reports-section">
+        <div className="section-heading standalone">
+          <div><span>Formatos académicos</span><h2>Reportes disponibles</h2><p>Resultados, promedios y seguimiento académico.</p></div>
+          <Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Todos los grupos" /></Field>
+        </div>
+        <div className="report-grid">{academicReports.map(renderReportItem)}</div>
       </section>
 
       <Modal open={studentListOpen} onClose={() => setStudentListOpen(false)} title="Personalizar lista de alumnos" size="small">

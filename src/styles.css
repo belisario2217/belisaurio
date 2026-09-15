@@ -487,6 +487,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .report-builder-controls { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); align-content: center; gap: 12px; padding: 22px; }
 .builder-buttons { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
 .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 13px; }
+.reports-section { display: grid; gap: 2px; }
 .report-item { min-height: 132px; display: grid; grid-template-columns: 44px 1fr; gap: 12px; padding: 17px; background: white; border: 1px solid var(--line); border-radius: 6px; }
 .report-item-icon { width: 44px; height: 44px; display: grid; place-items: center; color: var(--blue); background: #e1f0f5; border-radius: 5px; }
 .report-item h3 { color: var(--navy); font-size: 13px; }
