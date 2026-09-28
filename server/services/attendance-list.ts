@@ -92,18 +92,14 @@ function attendanceContexts(groupId: number | null) {
   const contexts = all<AttendanceContext>(
     `SELECT g.id AS group_id, g.name AS group_name, p.name AS program_name,
      p.duration_periods, sh.name AS shift_name, sh.start_time, sh.end_time,
-     sc.name AS cycle_name, a.id AS assignment_id, s.name AS subject_name,
-     t.full_name AS teacher_name, ap.name AS period_name
+     sc.name AS cycle_name, NULL AS assignment_id, 'TODAS LAS MATERIAS' AS subject_name,
+     NULL AS teacher_name, NULL AS period_name
      FROM groups g
      JOIN programs p ON p.id = g.program_id
      JOIN shifts sh ON sh.id = g.shift_id
      JOIN school_cycles sc ON sc.id = g.cycle_id
-     LEFT JOIN subject_assignments a ON a.group_id = g.id AND a.is_active = 1
-     LEFT JOIN subjects s ON s.id = a.subject_id
-     LEFT JOIN teachers t ON t.id = a.teacher_id
-     LEFT JOIN academic_periods ap ON ap.id = a.period_id
      WHERE g.is_active = 1 AND (? IS NULL OR g.id = ?)
-     ORDER BY g.name, COALESCE(ap.sequence, 0), COALESCE(s.name, '')`,
+     ORDER BY g.name`,
     groupId,
     groupId
   );
@@ -254,9 +250,9 @@ function buildAttendanceSheet(
     });
   };
   setInfo("A7:C7", "NOMBRE DEL CURSO:", "D7:F7", page.context.program_name);
-  setInfo("G7:I7", "MATERIA:", "J7:O7", page.context.subject_name ?? "POR ASIGNAR");
+  setInfo("G7:I7", "ALCANCE:", "J7:O7", "TODAS LAS MATERIAS");
   setInfo("P7:T7", "SEMESTRE Y GRUPO:", "U7:X7", page.context.group_name, true);
-  setInfo("A8:C8", "NOMBRE DEL DOCENTE:", "D8:F8", page.context.teacher_name ?? "POR ASIGNAR");
+  setInfo("A8:C8", "RESPONSABLE:", "D8:F8", "");
   setInfo("G8:I8", "DURACIÓN:", "J8:M8", `${page.context.duration_periods} SEMESTRES`, true);
   setInfo("N8:P8", "HORARIO:", "Q8:X8", schedule(page.context));
   setInfo("A9:C9", "PERIODO:", "D9:F9", page.context.period_name ?? page.context.cycle_name);
@@ -380,14 +376,14 @@ function drawAttendancePdfPage(
   const y1 = 94;
   pdfCell(doc, left, y1, labelWidth, fieldHeight, "NOMBRE DEL CURSO:", { size: 6.4 });
   pdfCell(doc, left + labelWidth, y1, 176, fieldHeight, page.context.program_name, { size: 7 });
-  pdfCell(doc, left + 268, y1, 56, fieldHeight, "MATERIA:", { size: 6.4 });
+  pdfCell(doc, left + 268, y1, 56, fieldHeight, "ALCANCE:", { size: 6.4 });
   pdfCell(doc, left + 324, y1, 226, fieldHeight, page.context.subject_name ?? "POR ASIGNAR", { size: 7 });
   pdfCell(doc, left + 550, y1, 94, fieldHeight, "SEMESTRE Y GRUPO:", { size: 6 });
   pdfCell(doc, left + 644, y1, 108, fieldHeight, page.context.group_name, { bold: true, size: 7 });
 
   const y2 = y1 + fieldHeight;
-  pdfCell(doc, left, y2, labelWidth, fieldHeight, "NOMBRE DEL DOCENTE:", { size: 6.2 });
-  pdfCell(doc, left + labelWidth, y2, 176, fieldHeight, page.context.teacher_name ?? "POR ASIGNAR", { size: 7 });
+  pdfCell(doc, left, y2, labelWidth, fieldHeight, "RESPONSABLE:", { size: 6.2 });
+  pdfCell(doc, left + labelWidth, y2, 176, fieldHeight, "", { size: 7 });
   pdfCell(doc, left + 268, y2, 56, fieldHeight, "DURACIÓN:", { size: 6.4 });
   pdfCell(doc, left + 324, y2, 112, fieldHeight, `${page.context.duration_periods} SEMESTRES`, { bold: true, size: 7 });
   pdfCell(doc, left + 436, y2, 70, fieldHeight, "HORARIO:", { size: 6.4 });

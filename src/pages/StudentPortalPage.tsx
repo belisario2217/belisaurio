@@ -51,10 +51,8 @@ type PortalData = {
   promotion: { eligible: boolean; targetPeriodNumber: number; overdueMonths: number; overdueAmount: number; reasons: string[] };
   attendance: Array<{
     month: string;
-    subject_code: string;
-    subject_name: string;
-    scheduled_classes: number;
-    attended_classes: number;
+    scheduled_days: number;
+    attended_days: number;
     percentage: number;
   }>;
   subjects: Array<{
@@ -195,11 +193,11 @@ export function StudentPortalPage() {
       </section>
 
       <section className="table-section">
-        <header className="section-heading"><div><span>Control académico</span><h2>Mi asistencia mensual</h2></div><strong className="table-sub">Mínimo para evaluación: 80%</strong></header>
-        <div className="table-wrap"><table><thead><tr><th>Mes</th><th>Materia</th><th>Asistencias</th><th>Clases impartidas</th><th>Porcentaje</th><th>Condición</th></tr></thead><tbody>
-          {attendance.map((row) => <tr key={`${row.month}-${row.subject_code}`}><td>{row.month}</td><td><strong className="table-main">{row.subject_name}</strong><span className="table-sub">{row.subject_code}</span></td><td>{row.attended_classes}</td><td>{row.scheduled_classes}</td><td><strong className={row.percentage >= 80 ? "grade-pass-text" : "grade-fail-text"}>{Number(row.percentage).toFixed(1)}%</strong></td><td><StatusBadge active={row.percentage >= 80} label={row.percentage >= 80 ? "CUMPLE" : "NO CUMPLE"} /></td></tr>)}
+        <header className="section-heading"><div><span>Común a todas mis materias</span><h2>Mi asistencia por día</h2></div><strong className="table-sub">Resumen mensual · Mínimo para evaluación: 80%</strong></header>
+        <div className="table-wrap"><table><thead><tr><th>Mes</th><th>Días presentes</th><th>Días registrados</th><th>Porcentaje</th><th>Condición</th></tr></thead><tbody>
+          {attendance.map((row) => <tr key={row.month}><td>{row.month}</td><td>{row.attended_days}</td><td>{row.scheduled_days}</td><td><strong className={row.percentage >= 80 ? "grade-pass-text" : "grade-fail-text"}>{Number(row.percentage).toFixed(1)}%</strong></td><td><StatusBadge active={row.percentage >= 80} label={row.percentage >= 80 ? "CUMPLE" : "NO CUMPLE"} /></td></tr>)}
         </tbody></table></div>
-        {!attendance.length && <EmptyState icon={<CalendarCheck size={25} />} title="Asistencia pendiente" text="Tu docente aún no ha confirmado la asistencia mensual." />}
+        {!attendance.length && <EmptyState icon={<CalendarCheck size={25} />} title="Asistencia pendiente" text="Todavía no hay días de asistencia confirmados." />}
       </section>
 
       <section className="portal-subjects">

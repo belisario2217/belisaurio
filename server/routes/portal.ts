@@ -5,6 +5,7 @@ import { buildBilling } from "../services/billing.js";
 import { ApiError } from "../utils.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
+import { studentAttendanceMonths } from "../services/daily-attendance.js";
 
 export const portalRouter = Router();
 
@@ -37,7 +38,7 @@ function scoreOrNull(value: unknown) {
 function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
   const rows = gradeRows.filter((grade) => grade.subject_id === subject.subject_id);
   const latest = rows.at(-1);
-  const partialMode = rows.find((grade) =>
+  const partialMode = [...rows].reverse().find((grade) =>
     grade.evaluation_mode === "partials" &&
     (grade.partial_1 != null || grade.partial_2 != null || grade.partial_3 != null)
   );
@@ -45,17 +46,19 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
     const match = rows.filter((grade) => grade.period_sequence === sequence && grade.final_score != null).at(-1);
     return scoreOrNull(match?.final_score);
   };
-  const partial_1 = scoreOrNull(partialMode?.partial_1) ?? bySequence(1);
-  const partial_2 = scoreOrNull(partialMode?.partial_2) ?? bySequence(2);
-  const partial_3 = scoreOrNull(partialMode?.partial_3) ?? bySequence(3);
+  const partial_1 = partialMode ? scoreOrNull(partialMode.partial_1) : bySequence(1);
+  const partial_2 = partialMode ? scoreOrNull(partialMode.partial_2) : bySequence(2);
+  const partial_3 = partialMode ? scoreOrNull(partialMode.partial_3) : bySequence(3);
   const completedScores = rows
     .map((grade) => scoreOrNull(grade.final_score))
     .filter((score): score is number => score !== null);
-  const final_score = scoreOrNull(subject.explicit_score) ?? (completedScores.length
+  const final_score = scoreOrNull(partialMode?.final_score) ?? scoreOrNull(subject.explicit_score) ?? (completedScores.length
     ? Number((completedScores.reduce((sum, score) => sum + score, 0) / completedScores.length).toFixed(1))
     : null);
   const passingScore = Math.max(...rows.map((grade) => Number(grade.passing_score ?? 0)), 0);
-  const status = subject.explicit_status === "completed"
+  const status = partialMode && [partial_1, partial_2, partial_3].some((score) => score === null)
+    ? "pending"
+    : subject.explicit_status === "completed"
     ? "passed"
     : final_score == null
       ? "pending"
@@ -187,21 +190,7 @@ portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedReque
     enrollment.student_id,
     enrollment.group_id
   );
-  const attendance = all<any>(
-    `SELECT am.month, s.code AS subject_code, s.name AS subject_name,
-     am.scheduled_classes, COALESCE(ar.attended_classes, 0) AS attended_classes,
-     CASE WHEN am.scheduled_classes > 0
-       THEN ROUND(COALESCE(ar.attended_classes, 0) * 100.0 / am.scheduled_classes, 1)
-       ELSE 0 END AS percentage
-     FROM attendance_months am
-     JOIN subject_assignments a ON a.id = am.assignment_id
-     JOIN subjects s ON s.id = a.subject_id
-     LEFT JOIN attendance_records ar ON ar.attendance_month_id = am.id AND ar.enrollment_id = ?
-     WHERE a.group_id = ? AND am.status = 'confirmed'
-     ORDER BY am.month DESC, s.name`,
-    enrollment.enrollment_id,
-    enrollment.group_id
-  );
+  const attendance = studentAttendanceMonths(enrollment.enrollment_id);
   const manualRegistration = get<{ status: string; paid_at: string | null; period_number: number }>(
     "SELECT status, paid_at, period_number FROM student_registration_status WHERE enrollment_id = ? AND period_number = ?",
     enrollment.enrollment_id,

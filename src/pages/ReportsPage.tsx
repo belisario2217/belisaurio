@@ -38,7 +38,7 @@ type CurricularDraft = {
 
 const reports = [
   { type: "students", title: "Lista general de alumnos", description: "Directorio limpio por grupo con campos seleccionables.", icon: UsersRound },
-  { type: "attendance", title: "Lista de asistencia", description: "Plantilla institucional por grupo, materia y docente, lista para imprimir.", icon: ClipboardCheck },
+  { type: "attendance", title: "Lista de asistencia", description: "Una lista por grupo para registrar cada día, válida para todas las materias.", icon: ClipboardCheck },
   { type: "gradebook", title: "Concentrado de calificaciones", description: "Resultados por alumno, materia y periodo.", icon: Sheet },
   { type: "subjects", title: "Reporte por materia", description: "Promedio, evaluaciones e indice de reprobacion.", icon: FileText },
   { type: "teachers", title: "Reporte por docente", description: "Materias, grupos asignados y promedio general.", icon: GraduationCap },

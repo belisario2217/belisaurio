@@ -52,6 +52,7 @@ type RosterRow = {
   };
 };
 type Roster = { assignment: Assignment; criteria: any[]; students: RosterRow[] };
+type ImportOption = { id: number; group_id: number; group_name: string; subject_name: string; subject_code: string; semester: number; period_name: string; cycle_name: string };
 
 export function GradesPage() {
   const { can, user } = useAuth();
@@ -70,6 +71,11 @@ export function GradesPage() {
   const [assignmentForm, setAssignmentForm] = useState({ subjectId: "", groupId: "", teacherId: "", periodId: "", gradingScaleId: "", evaluationMode: "partials" });
   const [weights, setWeights] = useState<Record<number, number>>({});
   const [importOpen, setImportOpen] = useState(false);
+  const [importOptions, setImportOptions] = useState<ImportOption[]>([]);
+  const [importGroup, setImportGroup] = useState("");
+  const [importSemesters, setImportSemesters] = useState<number[]>([]);
+  const [importAssignments, setImportAssignments] = useState<number[]>([]);
+  const [importFormat, setImportFormat] = useState("acta");
   const [preview, setPreview] = useState<any>(null);
   const [existingMode, setExistingMode] = useState("ignore");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -230,9 +236,31 @@ export function GradesPage() {
       setBusy(false);
     }
   }
+  async function openImport() {
+    setBusy(true);
+    try {
+      const records = await api<ImportOption[]>("/grades/import/options");
+      setImportOptions(records);
+      setImportGroup(selected ? String(selected.group_id) : "");
+      setImportSemesters(selected ? [...new Set(records.filter((a) => a.id === selected.id).map((a) => a.semester))] : []);
+      setImportAssignments(selected && records.some((a) => a.id === selected.id) ? [selected.id] : []);
+      setImportFormat("acta");
+      setPreview(null);
+      setImportOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No fue posible cargar los filtros.");
+    } finally { setBusy(false); }
+  }
+
   async function previewImport(file: File) {
     const body = new FormData();
     body.append("file", file);
+    body.append("format", importFormat);
+    if (importFormat === "acta") {
+      body.append("groupId", importGroup);
+      body.append("semesters", JSON.stringify(importSemesters));
+      body.append("assignmentIds", JSON.stringify(importAssignments));
+    }
     setBusy(true);
     try {
       setPreview(await api("/grades/import/preview", { method: "POST", body }));
@@ -274,6 +302,11 @@ export function GradesPage() {
     ? Array.from(new Map(assignments.map((assignment) => [assignment.group_id, { id: assignment.group_id, name: assignment.group_name }])).values())
     : options.groups ?? [];
   const hasEligibleStudents = user?.roleName !== "Docente" || Boolean(roster?.students.some((student) => student.eligibility.eligible));
+  const importGroupOptions = [...new Map(importOptions.map((a) => [a.group_id, { id: a.group_id, name: a.group_name }])).values()];
+  const groupImportOptions = importOptions.filter((a) => String(a.group_id) === importGroup);
+  const semesterOptions = [...new Set(groupImportOptions.map((a) => a.semester))].sort((a, b) => a - b);
+  const subjectImportOptions = [...new Map(groupImportOptions.filter((a) => importSemesters.includes(a.semester)).map((a) => [a.id, a])).values()];
+  const canUploadActa = importFormat === "legacy" || Boolean(importGroup && importSemesters.length && importAssignments.length);
 
   return (
     <div className="grades-layout">
@@ -283,6 +316,7 @@ export function GradesPage() {
           {can("catalogs.manage") && <button className="icon-button primary-icon" onClick={openCreateAssignment} title={"Nueva asignaci\u00f3n"}><Plus size={18} /></button>}
         </div>
         <div className="assignment-filters">
+          {can("grades.import") && <Button variant="secondary" icon={<Upload size={17} />} busy={busy} onClick={openImport}>Importar actas</Button>}
           <Select options={visibleGroupOptions} value={filters.groupId} onChange={(event) => { const next = { ...filters, groupId: event.target.value }; setFilters(next); loadAssignments(next); }} placeholder="Todos los grupos" />
           <Select options={options.periods ?? []} value={filters.periodId} onChange={(event) => { const next = { ...filters, periodId: event.target.value }; setFilters(next); loadAssignments(next); }} placeholder="Todos los periodos" />
         </div>
@@ -308,7 +342,7 @@ export function GradesPage() {
               </div>
               <div className="grade-header-actions">
                 {can("grades.import") && <Button variant="secondary" icon={<FileSpreadsheet size={17} />} onClick={() => download("/grades/template/import.xlsx", "plantilla-calificaciones.xlsx")}>Formato</Button>}
-                {can("grades.import") && <Button variant="secondary" icon={<Upload size={17} />} onClick={() => { setImportOpen(true); setPreview(null); }}>Importar</Button>}
+                {can("grades.import") && <Button variant="secondary" icon={<Upload size={17} />} busy={busy} onClick={openImport}>Importar</Button>}
                 {can("grades.export") && (
                   <div className="split-actions">
                     <button title="Exportar Excel" onClick={() => download(`/grades/export/file?format=xlsx&groupId=${selected.group_id}`, "calificaciones.xlsx")}><FileSpreadsheet size={17} /></button>
@@ -404,14 +438,27 @@ export function GradesPage() {
         </form>
       </Modal>
 
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importar calificaciones" size="large">
+      <Modal open={importOpen} onClose={() => { if (!busy) setImportOpen(false); }} title="Importar calificaciones" size="large">
         {!preview ? (
           <div className="import-step">
-            <div className="drop-zone" onClick={() => fileRef.current?.click()}>
-              <FileSpreadsheet size={36} /><strong>Selecciona un archivo Excel o CSV</strong><span>{"La validaci\u00f3n no modifica datos"}</span>
-              <input ref={fileRef} hidden type="file" accept=".xlsx,.xls,.csv" onChange={(event) => event.target.files?.[0] && previewImport(event.target.files[0])} />
-            </div>
-            <button className="template-link" onClick={() => download("/grades/template/import.xlsx", "plantilla-calificaciones.xlsx")}><Download size={17} /> Descargar plantilla base</button>
+            <Field label="Formato"><select value={importFormat} disabled={busy} onChange={(event) => setImportFormat(event.target.value)}><option value="acta">Acta de calificaciones por materia</option><option value="legacy">Tabla anterior por matrícula (Excel o CSV)</option></select></Field>
+            {importFormat === "acta" && <>
+              <Field label="Grupo" required><Select options={importGroupOptions} value={importGroup} disabled={busy} onChange={(event) => { setImportGroup(event.target.value); setImportSemesters([]); setImportAssignments([]); }} /></Field>
+              <fieldset className="acta-options" disabled={busy}><legend>Semestres</legend>
+                {!semesterOptions.length && <p>Selecciona un grupo con materias asignadas para tres parciales.</p>}
+                {semesterOptions.map((semester) => <label key={semester}><input type="checkbox" checked={importSemesters.includes(semester)} onChange={(event) => { setImportSemesters(event.target.checked ? [...importSemesters, semester] : importSemesters.filter((s) => s !== semester)); setImportAssignments([]); }} /> Semestre {semester}</label>)}
+              </fieldset>
+              <fieldset className="acta-options" disabled={busy}><legend>Materias y ciclo</legend>
+                {!subjectImportOptions.length && <p>Selecciona uno o varios semestres.</p>}
+                {subjectImportOptions.map((assignment) => <label key={assignment.id}><input type="checkbox" checked={importAssignments.includes(assignment.id)} onChange={(event) => setImportAssignments(event.target.checked ? [...importAssignments, assignment.id] : importAssignments.filter((id) => id !== assignment.id))} /><span>{assignment.subject_code} — {assignment.subject_name}<small>{assignment.cycle_name} · {assignment.period_name}</small></span></label>)}
+              </fieldset>
+              <p>Completa los nombres de los alumnos y las columnas PRIMERO, SEGUNDO y TERCERO. Puedes escribir la matrícula en lugar del nombre. Para varias materias, usa una copia del acta en cada hoja e indica materia, semestre y ciclo en su encabezado.</p>
+              <p>Las celdas vacías conservan el parcial registrado. El cero cuenta como calificación. El promedio se calcula en el sistema.</p>
+            </>}
+            <Button variant="secondary" icon={<FileSpreadsheet size={24} />} disabled={!canUploadActa} busy={busy} onClick={() => fileRef.current?.click()}>Seleccionar archivo y validar</Button>
+            <span>La validación no modifica datos.</span>
+            <input ref={fileRef} hidden type="file" accept={importFormat === "acta" ? ".xlsx,.xls" : ".xlsx,.xls,.csv"} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void previewImport(file); }} />
+            <button className="template-link" disabled={busy} onClick={() => download(`/grades/template/${importFormat === "acta" ? "import" : "legacy"}.xlsx`, importFormat === "acta" ? "ACTA DE CALIFICACIONES POR MATERIA.xlsx" : "plantilla-calificaciones.xlsx")}><Download size={17} /> Descargar plantilla</button>
           </div>
         ) : (
           <div className="preview-step">
@@ -419,10 +466,12 @@ export function GradesPage() {
               <div><span>Filas</span><strong>{preview.summary.total}</strong></div><div className="summary-valid"><span>{"V\u00e1lidas"}</span><strong>{preview.summary.valid}</strong></div>
               <div className="summary-error"><span>Con error</span><strong>{preview.summary.errors}</strong></div><div><span>Existentes</span><strong>{preview.summary.existing}</strong></div>
             </div>
-            {preview.errors.length > 0 && <div className="error-list">{preview.errors.slice(0, 6).map((error: any) => <p key={`${error.row}-${error.message}`}><b>Fila {error.row}</b>{error.message}</p>)}</div>}
+            {preview.errors.length > 0 && <div className="error-list">{preview.errors.map((error: any, index: number) => <p key={index}><b>{error.sheet ? `${error.sheet}, ` : ""}fila {error.row}: </b>{error.message}</p>)}<p>Las filas con error no se guardarán. Corrige el archivo o confirma únicamente las filas válidas.</p></div>}
+            {!preview.summary.total && <p>No se encontraron alumnos con parciales capturados. Completa el acta y vuelve a cargarla.</p>}
             <div className="segmented"><button className={existingMode === "ignore" ? "active" : ""} onClick={() => setExistingMode("ignore")}>Ignorar existentes</button><button className={existingMode === "update" ? "active" : ""} onClick={() => setExistingMode("update")}>Actualizar existentes</button></div>
-            <div className="mini-preview-table"><table><thead><tr><th>Fila</th><th>{"Matr\u00edcula"}</th><th>Materia</th><th>{"Calificaci\u00f3n"}</th></tr></thead><tbody>
-              {preview.rows.slice(0, 8).map((row: any) => <tr key={row.row}><td>{row.row}</td><td>{row.studentNumber}</td><td>{row.subject}</td><td><strong>{row.score}</strong></td></tr>)}
+            <p>Vista previa de hasta 150 filas. Al actualizar, los parciales vacíos conservan sus valores actuales.</p>
+            <div className="mini-preview-table"><table><thead><tr><th>Hoja / fila</th><th>Alumno</th><th>Materia / semestre</th><th>Primero</th><th>Segundo</th><th>Tercero</th><th>Promedio</th></tr></thead><tbody>
+              {preview.rows.map((row: any, index: number) => <tr key={index}><td>{row.sheet} / {row.row}</td><td>{row.studentName}<br />{row.studentNumber}</td><td>{row.subject}{row.semester ? ` / ${row.semester}°` : ""}</td>{[0, 1, 2].map((i) => <td key={i}>{row.resultingPartials?.[i] ?? "—"}</td>)}<td><strong>{row.score}</strong></td></tr>)}
             </tbody></table></div>
             <div className="modal-actions"><Button variant="ghost" onClick={() => setPreview(null)}>Elegir otro archivo</Button><Button busy={busy} onClick={applyImport} disabled={!preview.summary.valid}>{"Confirmar importaci\u00f3n"}</Button></div>
           </div>

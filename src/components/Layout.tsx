@@ -34,7 +34,7 @@ const titles: Record<string, string> = {
   "/alumnos": "Gestión de alumnos",
   "/grupos": "Administración de grupos",
   "/calificaciones": "Captura de calificaciones",
-  "/asistencia": "Asistencia mensual",
+  "/asistencia": "Asistencia diaria",
   "/cobros": "Registro de cobros",
   "/colegiaturas-mensuales": "Colegiaturas mensuales",
   "/mensajes-admin": "Mensajes importantes",

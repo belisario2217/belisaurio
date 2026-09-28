@@ -134,7 +134,108 @@ describe("Aula Nova API", () => {
     expect([grade.partial_1, grade.partial_2, grade.partial_3]).toEqual([8, 9, 10]);
   });
 
-  it("restricts teachers to their assignments and confirms monthly attendance", async () => {
+  it("imports the supplied acta, preserves blank partials and exposes them to the student", async () => {
+    const auth = { Authorization: `Bearer ${token}` };
+    const template = await request(app).get("/api/grades/template/import.xlsx").set(auth).buffer(true).parse(binaryParser);
+    expect(template.status).toBe(200);
+    expect(template.body.equals(fs.readFileSync("server/templates/acta-calificaciones.xlsx"))).toBe(true);
+    const options = await request(app).get("/api/grades/import/options").set(auth);
+    expect(options.status).toBe(200);
+    const option = options.body.find((a: any) => a.subject_code === "COM-101" && a.group_name === "1A");
+    expect(option).toBeTruthy();
+    const roster = await request(app).get(`/api/grades/assignment/${option.id}/roster`).set(auth);
+    const student = roster.body.students.find((s: any) => s.student_number === "AN26001");
+    expect(student).toBeTruthy();
+    // Work from the actual user-supplied file, including its merged names and formula column.
+    const makeActa = (scores: unknown[], edits: Record<string, unknown> = {}, duplicate = false) => {
+      const workbook = XLSX.read(template.body, { type: "buffer" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      for (let r = 6; r <= 27; r++) for (const col of ["B", "E", "F", "G"]) delete sheet[`${col}${r}`];
+      const cells: Record<string, unknown> = { C2: option.group_name, C3: option.semester, E2: option.cycle_name, E3: option.subject_code, B6: student.student_name, ...edits };
+      scores.forEach((score, i) => { if (score !== null) cells[`${["E", "F", "G"][i]}6`] = score; });
+      for (const [address, value] of Object.entries(cells)) sheet[address] = { t: typeof value === "number" ? "n" : "s", v: value };
+      if (duplicate) { sheet.B7 = { ...sheet.B6 }; sheet.E7 = { t: "n", v: 7 }; }
+      return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    };
+    const preview = (buffer: Buffer, fields: Record<string, string> = {}) => request(app).post("/api/grades/import/preview").set(auth)
+      .field({ groupId: String(option.group_id), assignmentIds: JSON.stringify([option.id]), semesters: JSON.stringify([option.semester]), ...fields })
+      .attach("file", buffer, "acta.xlsx");
+    const apply = (id: string, mode = "update") => request(app).post("/api/grades/import/apply").set(auth).send({ previewId: id, existingMode: mode });
+    const first = await preview(makeActa([8, "9,5", 10]));
+    expect(first.status).toBe(200);
+    expect(first.body.summary).toMatchObject({ total: 1, valid: 1, errors: 0 });
+    expect(first.body.rows[0].resultingPartials).toEqual([8, 9.5, 10]);
+    expect((await apply(first.body.previewId)).status).toBe(200);
+    expect((await apply(first.body.previewId)).status).toBe(400);
+    const update = await preview(makeActa([0, null, null]));
+    expect(update.body.rows[0].resultingPartials).toEqual([0, 9.5, 10]);
+    expect((await apply(update.body.previewId)).status).toBe(200);
+    const login = await request(app).post("/api/auth/login").send({ email: "an26001@alumnoifop.edu", password: "Alumno123!" });
+    const portal = await request(app).get("/api/portal").set("Authorization", `Bearer ${login.body.token}`);
+    const subject = portal.body.subjects.find((s: any) => s.code === "COM-101");
+    expect([subject.partial_1, subject.partial_2, subject.partial_3]).toEqual([0, 9.5, 10]);
+    expect(subject.final_score).toBe(6.5);
+    const ignored = await preview(makeActa([10, 10, 10]));
+    expect((await apply(ignored.body.previewId, "ignore")).body.ignored).toBe(1);
+    const invalid = await preview(makeActa(["NP", 11, 8]));
+    expect(invalid.body.summary.valid).toBe(0);
+    expect(invalid.body.errors.length).toBe(2);
+    const unknown = await preview(makeActa([8, 9, 10], { B6: "ALUMNO INEXISTENTE" }));
+    expect(unknown.body.summary.valid).toBe(0);
+    expect(unknown.body.errors[0].row).toBe(6);
+    const wrongGroup = await preview(makeActa([8, 9, 10], { C2: "OTRO GRUPO" }));
+    expect(wrongGroup.body.summary.valid).toBe(0);
+    expect(wrongGroup.body.errors[0].row).toBe(3);
+    const wrongSemester = await preview(makeActa([8, 9, 10]), { semesters: "[99]" });
+    expect(wrongSemester.status).toBe(400);
+    const duplicate = await preview(makeActa([8, 9, 10], {}, true));
+    expect(duplicate.body.summary.valid).toBe(0);
+    expect(duplicate.body.errors[0].message).toContain("duplicados");
+    const byNumber = await preview(makeActa([8, 9, 10], { B6: student.student_number }));
+    expect(byNumber.body.summary.valid).toBe(1);
+    // Apply rechecks locking, so closing a subject after preview cannot bypass it.
+    db.prepare("UPDATE subject_assignments SET grade_entry_locked = 1 WHERE id = ?").run(option.id);
+    expect((await apply(byNumber.body.previewId)).status).toBe(409);
+    expect((await preview(makeActa([8, 9, 10]))).body.summary.valid).toBe(0);
+    db.prepare("UPDATE subject_assignments SET grade_entry_locked = 0 WHERE id = ?").run(option.id);
+    // A second admin cannot apply another user's preview.
+    const { signToken, loadUser } = await import("./auth.js");
+    const owner = db.prepare("SELECT * FROM users WHERE email = 'admin@aulanova.edu.mx'").get() as any;
+    const other = db.prepare("INSERT INTO users(full_name, email, password_hash, role_id, is_active) VALUES ('Importador', 'import-test@example.com', ?, ?, 1)").run(owner.password_hash, owner.role_id);
+    const otherToken = signToken(loadUser(Number(other.lastInsertRowid))!);
+    const forbidden = await request(app).post("/api/grades/import/apply").set("Authorization", `Bearer ${otherToken}`).send({ previewId: byNumber.body.previewId, existingMode: "update" });
+    expect(forbidden.status).toBe(403);
+    db.prepare("DELETE FROM users WHERE id = ?").run(other.lastInsertRowid);
+    expect((await apply(byNumber.body.previewId)).status).toBe(200);
+    // Multiple worksheets identify different selected subjects rather than copying the same marks to all.
+    const second = db.prepare(`SELECT a.* FROM subject_assignments a JOIN subjects s ON s.id = a.subject_id
+      WHERE a.group_id = ? AND s.code = 'MAT-101' ORDER BY a.id LIMIT 1`).get(option.group_id) as any;
+    db.prepare("UPDATE subject_assignments SET evaluation_mode = 'partials' WHERE id = ?").run(second.id);
+    const secondOptions = await request(app).get("/api/grades/import/options").set(auth);
+    const secondOption = secondOptions.body.find((a: any) => a.id === second.id);
+    const multi = XLSX.read(makeActa([7, 8, 9]), { type: "buffer" });
+    const extra = XLSX.read(makeActa([10, null, null], { E3: secondOption.subject_code, C3: secondOption.semester, E2: secondOption.cycle_name }), { type: "buffer" });
+    XLSX.utils.book_append_sheet(multi, extra.Sheets[extra.SheetNames[0]], "Matemáticas");
+    const multiPreview = await preview(XLSX.write(multi, { type: "buffer", bookType: "xlsx" }), {
+      assignmentIds: JSON.stringify([option.id, second.id]), semesters: JSON.stringify([...new Set([option.semester, secondOption.semester])])
+    });
+    expect(multiPreview.body.summary).toMatchObject({ valid: 2, errors: 0 });
+    expect(new Set(multiPreview.body.rows.map((r: any) => r.assignmentId)).size).toBe(2);
+    expect((await apply(multiPreview.body.previewId)).status).toBe(200);
+    const outsideSelection = await preview(XLSX.write(multi, { type: "buffer", bookType: "xlsx" }));
+    expect(outsideSelection.body.summary.valid).toBe(1);
+    expect(outsideSelection.body.errors[0].sheet).toBe("Matemáticas");
+    db.prepare("UPDATE subject_assignments SET evaluation_mode = ? WHERE id = ?").run(second.evaluation_mode, second.id);
+    // Incomplete marks must stay empty in the student portal, even when a period has an average.
+    await request(app).put(`/api/grades/assignment/${option.id}`).set(auth)
+      .send({ grades: [{ enrollmentId: student.enrollment_id, partials: { partial1: null, partial2: 8, partial3: null } }] }).expect(200);
+    const incomplete = await request(app).get("/api/portal").set("Authorization", `Bearer ${login.body.token}`);
+    const partialSubject = incomplete.body.subjects.find((s: any) => s.code === "COM-101");
+    expect([partialSubject.partial_1, partialSubject.partial_2, partialSubject.partial_3]).toEqual([null, 8, null]);
+    expect(partialSubject.status).toBe("pending");
+  });
+
+  it("restricts teachers to their groups and shares daily attendance across subjects", async () => {
     const roles = await request(app).get("/api/users/roles/list").set("Authorization", `Bearer ${token}`);
     const teacherRole = roles.body.find((role: any) => role.name === "Docente");
     const createdUser = await request(app)
@@ -191,19 +292,69 @@ describe("Aula Nova API", () => {
     expect(registrationPayment.status).toBe(201);
     expect(registrationPayment.body.billing.payments.find((payment: any) => payment.folio === "REG-ATT-001").concept_type).toBe("enrollment");
 
-    const attendance = await request(app)
-      .put(`/api/attendance/assignment/${assignment.id}`)
-      .set("Authorization", `Bearer ${teacherToken}`)
-      .send({
-        month: "2026-08",
-        scheduledClasses: 10,
-        confirm: true,
-        records: roster.body.students.map((student: any) => ({
-          enrollmentId: student.enrollment_id,
-          attendedClasses: student.enrollment_id === target.enrollment_id ? 8 : 7
-        }))
-      });
-    expect(attendance.status).toBe(200);
+    const groupId = assignment.group_id;
+    const attendanceGroups = await request(app).get("/api/attendance/groups").set("Authorization", `Bearer ${teacherToken}`);
+    expect(attendanceGroups.status).toBe(200);
+    expect(attendanceGroups.body.filter((g: any) => g.id === groupId)).toHaveLength(1);
+    const allGroups = await request(app).get("/api/attendance/groups").set("Authorization", `Bearer ${token}`);
+    const outsideGroup = allGroups.body.find((g: any) => !attendanceGroups.body.some((visible: any) => visible.id === g.id));
+    expect(outsideGroup).toBeTruthy();
+    await request(app).get(`/api/attendance/group/${outsideGroup.id}?date=2026-08-01`).set("Authorization", `Bearer ${teacherToken}`).expect(403);
+    // Existing monthly totals remain available as history and never inflate daily percentages.
+    const oldMonth = db.prepare("INSERT INTO attendance_months(assignment_id, month, scheduled_classes, status) VALUES (?, '2026-08', 31, 'confirmed')").run(assignment.id);
+    db.prepare("INSERT INTO attendance_records(attendance_month_id, enrollment_id, attended_classes) VALUES (?, ?, 31)").run(oldMonth.lastInsertRowid, target.enrollment_id);
+    for (let day = 1; day <= 10; day++) {
+      const attendance = await request(app).put(`/api/attendance/group/${groupId}`)
+        .set("Authorization", `Bearer ${teacherToken}`).send({ date: `2026-08-${String(day).padStart(2, "0")}`, revision: 0, confirm: true,
+          records: roster.body.students.map((student: any) => ({ enrollmentId: student.enrollment_id,
+            status: day <= (student.enrollment_id === target.enrollment_id ? 8 : 7) ? "present" : "absent" })) });
+      expect(attendance.status).toBe(200);
+    }
+    const sharedAssignments = allAssignments.body.filter((a: any) => a.group_id === groupId);
+    for (const other of sharedAssignments) {
+      const shared = await request(app).get(`/api/grades/assignment/${other.id}/roster`).set("Authorization", `Bearer ${token}`);
+      expect(shared.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).eligibility.attendancePercentage).toBe(80);
+    }
+    const snapshot = await request(app).get(`/api/attendance/group/${groupId}?date=2026-08-01`).set("Authorization", `Bearer ${teacherToken}`);
+    expect(snapshot.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).summary).toMatchObject({ scheduled_days: 10, attended_days: 8, percentage: 80 });
+    expect(snapshot.body.legacy.some((r: any) => r.attended_classes === 31)).toBe(true);
+    const dailyRecords = roster.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" }));
+    const stale = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-01", revision: 0, confirm: true, records: dailyRecords });
+    expect(stale.status).toBe(409);
+    const resaved = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-01", revision: snapshot.body.day.revision, confirm: true, records: dailyRecords });
+    expect(resaved.status).toBe(200);
+    const draft = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-11", revision: 0, confirm: false, records: dailyRecords });
+    expect(draft.status).toBe(200);
+    const invalidDate = await request(app).get(`/api/attendance/group/${groupId}?date=2026-02-30`).set("Authorization", `Bearer ${teacherToken}`);
+    expect(invalidDate.status).toBe(400);
+    const incomplete = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-12", revision: 0, confirm: true, records: dailyRecords.slice(0, 1) });
+    expect(incomplete.status).toBe(400);
+    const noMark = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-12", revision: 0, confirm: true, records: dailyRecords.map((r: any) => ({ ...r, status: "" })) });
+    expect(noMark.status).toBe(400);
+    const duplicateRecords = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-12", revision: 0, confirm: true, records: [...dailyRecords, dailyRecords[0]] });
+    expect(duplicateRecords.status).toBe(400);
+    const foreignRecord = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
+      .send({ date: "2026-08-12", revision: 0, confirm: true, records: [{ enrollmentId: 999999, status: "present" }, ...dailyRecords] });
+    expect(foreignRecord.status).toBe(400);
+    // A transferred pupil still cannot receive a second mark for the same date in another group.
+    db.prepare("UPDATE enrollments SET group_id = ? WHERE id = ?").run(outsideGroup.id, target.enrollment_id);
+    const otherRoster = await request(app).get(`/api/attendance/group/${outsideGroup.id}?date=2026-08-01`).set("Authorization", `Bearer ${token}`);
+    const doubleDay = await request(app).put(`/api/attendance/group/${outsideGroup.id}`).set("Authorization", `Bearer ${token}`)
+      .send({ date: "2026-08-01", revision: 0, confirm: true, records: otherRoster.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" })) });
+    expect(doubleDay.status).toBe(409);
+    db.prepare("UPDATE enrollments SET group_id = ? WHERE id = ?").run(groupId, target.enrollment_id);
+    const oldEndpoint = await request(app).put(`/api/attendance/assignment/${assignment.id}`).set("Authorization", `Bearer ${teacherToken}`).send({});
+    expect(oldEndpoint.status).toBe(410);
+    const studentLogin = await request(app).post("/api/auth/login").send({ email: "an26001@alumnoifop.edu", password: "Alumno123!" });
+    const attendancePortal = await request(app).get("/api/portal").set("Authorization", `Bearer ${studentLogin.body.token}`);
+    expect(attendancePortal.body.attendance).toHaveLength(1);
+    expect(attendancePortal.body.attendance[0].scheduled_days).toBe(10);
 
     const refreshed = await request(app)
       .get(`/api/grades/assignment/${assignment.id}/roster`)
@@ -1099,6 +1250,8 @@ describe("Aula Nova API", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(workbookResponse.body);
     const sheet = workbook.worksheets[0];
+    expect(workbook.worksheets).toHaveLength(1);
+    expect(sheet.getCell("J7").value).toBe("TODAS LAS MATERIAS");
     expect(sheet.getCell("C2").value).toContain("CAMPUS FRONTERA");
     expect(sheet.getCell("A5").value).toBe("LISTA DE ASISTENCIA");
     expect(sheet.getCell("U7").value).toBe(group.name);

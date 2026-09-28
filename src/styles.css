@@ -797,3 +797,7 @@ tbody tr:last-child td { border-bottom: 0; }
   .catalog-nav > div { display: none; }
   .catalog-nav button { width: auto; flex: 0 0 auto; padding: 0 12px; white-space: nowrap; }
 }
+.acta-options { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 10px; max-height: 220px; overflow-y: auto; }
+.acta-options label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.acta-options input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; }
+.acta-options small { display: block; color: var(--muted); margin-top: 3px; }

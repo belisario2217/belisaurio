@@ -1,5 +1,7 @@
 ﻿import { Router } from "express";
 import multer from "multer";
+import { fileURLToPath } from "node:url";
+import { actaOptions, previewActa, type GradeImportRow, type ImportError } from "../services/grade-acta.js";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { all, get, run, transaction } from "../db.js";
 import { createPdf, parseWorkbook, pdfTable, sendWorkbook, type TabularRow } from "../services/files.js";
@@ -8,25 +10,12 @@ import { evaluationEligibility } from "../services/evaluation-eligibility.js";
 import { assertTeacherAssignment, isTeacherUser, teacherIdForUser } from "../services/teacher-scope.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 
-type GradeImportRow = {
-  row: number;
-  enrollmentId: number;
-  assignmentId: number;
-  studentNumber: string;
-  studentName: string;
-  subject: string;
-  group: string;
-  period: string;
-  score: number;
-  comments: string;
-  existingGradeId: number | null;
-};
-
 type GradePreview = {
+  userId: number;
   createdAt: number;
   fileName: string;
   valid: GradeImportRow[];
-  errors: Array<{ row: number; message: string }>;
+  errors: ImportError[];
 };
 
 const previews = new Map<string, GradePreview>();
@@ -469,7 +458,15 @@ gradesRouter.get("/history/:gradeId", requirePermission("grades.view"), (req: Au
   ));
 });
 
+gradesRouter.get("/import/options", requirePermission("grades.import"), (req: AuthenticatedRequest, res) => {
+  res.json(actaOptions(req.user));
+});
+
 gradesRouter.get("/template/import.xlsx", requirePermission("grades.import"), (_req, res) => {
+  res.download(fileURLToPath(new URL("../templates/acta-calificaciones.xlsx", import.meta.url)), "ACTA DE CALIFICACIONES POR MATERIA.xlsx");
+});
+
+gradesRouter.get("/template/legacy.xlsx", requirePermission("grades.import"), (_req, res) => {
   sendWorkbook(res, "plantilla-calificaciones.xlsx", "Calificaciones", [{
     Matricula: "0825AMRLEESC",
     Alumno: "Nombre de referencia opcional",
@@ -490,11 +487,13 @@ gradesRouter.get("/template/import.xlsx", requirePermission("grades.import"), (_
 });
 gradesRouter.post("/import/preview", requirePermission("grades.import"), upload.single("file"), (req: AuthenticatedRequest, res) => {
   if (!req.file) throw new ApiError(400, "Selecciona un archivo.");
-  const rows = parseWorkbook(req.file.buffer);
-  if (!rows.length) throw new ApiError(400, "El archivo no contiene filas.");
+  const acta = previewActa(req.file.buffer, req.body, req.user);
+  if (req.body.format === "acta" && !acta) throw new ApiError(400, "No se reconoció el acta. Usa la plantilla descargada y conserva su título y encabezados.");
+  const rows = acta ? [] : parseWorkbook(req.file.buffer);
+  if (!acta && !rows.length) throw new ApiError(400, "El archivo no contiene filas.");
   if (rows.length > 3000) throw new ApiError(400, "El archivo excede el lÃ­mite de 3,000 filas.");
-  const valid: GradeImportRow[] = [];
-  const errors: Array<{ row: number; message: string }> = [];
+  const valid: GradeImportRow[] = acta?.valid ?? [];
+  const errors: ImportError[] = acta?.errors ?? [];
 
   rows.forEach((source, index) => {
     const rowNumber = index + 2;
@@ -547,6 +546,7 @@ gradesRouter.post("/import/preview", requirePermission("grades.import"), upload.
       return;
     }
     const match = candidates[0];
+    assertTeacherAssignment(req.user, match.assignment_id);
     if (match.grade_entry_locked) {
       errors.push({ row: rowNumber, message: "La captura de esta materia esta cerrada." });
       return;
@@ -575,22 +575,27 @@ gradesRouter.post("/import/preview", requirePermission("grades.import"), upload.
     });
   });
   const previewId = crypto.randomUUID();
-  previews.set(previewId, { createdAt: Date.now(), fileName: req.file.originalname, valid, errors });
+  const total = acta?.total ?? rows.length;
+  for (const [id, preview] of previews) {
+    if (Date.now() - preview.createdAt > 15 * 60 * 1000) previews.delete(id);
+  }
+  previews.set(previewId, { userId: req.user!.id, createdAt: Date.now(), fileName: req.file.originalname, valid, errors });
   run(
     `INSERT INTO grade_imports(file_name, file_type, total_rows, valid_rows, error_rows, status, errors_json, imported_by)
      VALUES (?, ?, ?, ?, ?, 'previewed', ?, ?)`,
     req.file.originalname,
     req.file.mimetype,
-    rows.length,
+    total,
     valid.length,
     errors.length,
     JSON.stringify(errors),
     req.user!.id
   );
-  logActivity(req, "preview-import", "grades", previewId, { total: rows.length, valid: valid.length, errors: errors.length });
+  logActivity(req, "preview-import", "grades", previewId, { total, valid: valid.length, errors: errors.length });
   res.json({
     previewId,
-    summary: { total: rows.length, valid: valid.length, errors: errors.length, existing: valid.filter((row) => row.existingGradeId).length },
+    format: acta ? "acta" : "legacy",
+    summary: { total, valid: valid.length, errors: errors.length, existing: valid.filter((row) => row.existingGradeId).length },
     rows: valid.slice(0, 150),
     errors: errors.slice(0, 150)
   });
@@ -599,6 +604,7 @@ gradesRouter.post("/import/preview", requirePermission("grades.import"), upload.
 gradesRouter.post("/import/apply", requirePermission("grades.import"), (req: AuthenticatedRequest, res) => {
   const previewId = String(req.body.previewId ?? "");
   const preview = previews.get(previewId);
+  if (preview && preview.userId !== req.user!.id) throw new ApiError(403, "Esta vista previa pertenece a otro usuario.");
   if (!preview || Date.now() - preview.createdAt > 15 * 60 * 1000) throw new ApiError(400, "La vista previa expirÃ³. Carga el archivo de nuevo.");
   const updateExisting = req.body.existingMode === "update";
   let created = 0;
@@ -606,12 +612,21 @@ gradesRouter.post("/import/apply", requirePermission("grades.import"), (req: Aut
   let ignored = 0;
   transaction(() => {
     preview.valid.forEach((item) => {
-      if (item.existingGradeId && !updateExisting) {
+      assertTeacherAssignment(req.user, item.assignmentId);
+      const assignment = get<any>("SELECT is_active, evaluation_mode FROM subject_assignments WHERE id = ?", item.assignmentId);
+      if (!assignment?.is_active || (item.partials && assignment.evaluation_mode !== "partials")) throw new ApiError(409, "La asignación cambió. Vuelve a cargar el archivo.");
+      const current = get<any>("SELECT * FROM grades WHERE enrollment_id = ? AND assignment_id = ?", item.enrollmentId, item.assignmentId);
+      if (current && !updateExisting) {
         ignored++;
         return;
       }
-      saveGrade(req.user!.id, item.assignmentId, item.enrollmentId, item.score, optionalText(item.comments, 1000), "ImportaciÃ³n desde archivo");
-      if (item.existingGradeId) updated++;
+      const partials = item.partials ? Object.fromEntries([1, 2, 3].map((i) => [
+        `partial${i}`, item.partials![`partial${i}`] ?? current?.[`partial_${i}`] ?? null
+      ])) : undefined;
+      saveGrade(req.user!.id, item.assignmentId, item.enrollmentId, item.score,
+        item.partials ? current?.comments ?? null : optionalText(item.comments, 1000),
+        "Importación desde archivo", undefined, partials, isTeacherUser(req.user));
+      if (current) updated++;
       else created++;
     });
     run(

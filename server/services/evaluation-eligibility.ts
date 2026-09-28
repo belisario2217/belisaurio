@@ -1,4 +1,5 @@
 import { get } from "../db.js";
+import { studentAttendanceMonths } from "./daily-attendance.js";
 
 export type EvaluationEligibility = {
   eligible: boolean;
@@ -10,18 +11,10 @@ export type EvaluationEligibility = {
   reasons: string[];
 };
 
-export function evaluationEligibility(assignmentId: number, enrollmentId: number): EvaluationEligibility {
-  const attendance = get<{ scheduled: number; attended: number }>(
-    `SELECT COALESCE(SUM(am.scheduled_classes), 0) AS scheduled,
-     COALESCE(SUM(MIN(ar.attended_classes, am.scheduled_classes)), 0) AS attended
-     FROM attendance_months am
-     LEFT JOIN attendance_records ar ON ar.attendance_month_id = am.id AND ar.enrollment_id = ?
-     WHERE am.assignment_id = ? AND am.status = 'confirmed'`,
-    enrollmentId,
-    assignmentId
-  ) ?? { scheduled: 0, attended: 0 };
-  const scheduledClasses = Number(attendance.scheduled ?? 0);
-  const attendedClasses = Number(attendance.attended ?? 0);
+export function evaluationEligibility(_assignmentId: number, enrollmentId: number): EvaluationEligibility {
+  const months = studentAttendanceMonths(enrollmentId);
+  const scheduledClasses = months.reduce((sum, row) => sum + row.scheduled_days, 0);
+  const attendedClasses = months.reduce((sum, row) => sum + row.attended_days, 0);
   const attendancePercentage = scheduledClasses > 0
     ? Number((attendedClasses / scheduledClasses * 100).toFixed(1))
     : 0;
@@ -44,7 +37,7 @@ export function evaluationEligibility(assignmentId: number, enrollmentId: number
   const registrationPaid = Boolean(registration?.paid);
   const attendanceRecorded = scheduledClasses > 0;
   const reasons: string[] = [];
-  if (!attendanceRecorded) reasons.push("No hay asistencia mensual confirmada.");
+  if (!attendanceRecorded) reasons.push("No hay asistencia diaria confirmada del alumno.");
   else if (attendancePercentage < 80) reasons.push(`Asistencia insuficiente: ${attendancePercentage}% (mínimo 80%).`);
   if (!registrationPaid) reasons.push("No se encontró el pago de inscripción o reinscripción del periodo.");
 
