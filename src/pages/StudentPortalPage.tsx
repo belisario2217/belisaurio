@@ -194,7 +194,7 @@ export function StudentPortalPage() {
 
       <section className="table-section">
         <header className="section-heading"><div><span>Común a todas mis materias</span><h2>Mi asistencia por día</h2></div><strong className="table-sub">Resumen mensual · Mínimo para evaluación: 80%</strong></header>
-        <div className="table-wrap"><table><thead><tr><th>Mes</th><th>Días presentes</th><th>Días registrados</th><th>Porcentaje</th><th>Condición</th></tr></thead><tbody>
+        <div className="table-wrap"><table><thead><tr><th>Mes</th><th>Días presentes</th><th>Días de clase</th><th>Porcentaje</th><th>Condición</th></tr></thead><tbody>
           {attendance.map((row) => <tr key={row.month}><td>{row.month}</td><td>{row.attended_days}</td><td>{row.scheduled_days}</td><td><strong className={row.percentage >= 80 ? "grade-pass-text" : "grade-fail-text"}>{Number(row.percentage).toFixed(1)}%</strong></td><td><StatusBadge active={row.percentage >= 80} label={row.percentage >= 80 ? "CUMPLE" : "NO CUMPLE"} /></td></tr>)}
         </tbody></table></div>
         {!attendance.length && <EmptyState icon={<CalendarCheck size={25} />} title="Asistencia pendiente" text="Todavía no hay días de asistencia confirmados." />}

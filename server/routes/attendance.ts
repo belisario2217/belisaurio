@@ -56,7 +56,7 @@ attendanceRouter.get("/group/:id", requirePermission("attendance.view"), (req: A
   const day = get<any>("SELECT * FROM attendance_days WHERE group_id = ? AND attendance_date = ?", groupId, date)
     ?? { status: "draft", revision: 0, confirmed_at: null };
   const students = roster(groupId, date).map((student) => ({ ...student,
-    summary: studentAttendanceMonths(student.enrollment_id).find((row) => row.month === month)
+    summary: studentAttendanceMonths(student.enrollment_id, groupId).find((row) => row.month === month)
       ?? { scheduled_days: 0, attended_days: 0, percentage: 0 }
   }));
   const days = all("SELECT attendance_date, status FROM attendance_days WHERE group_id = ? AND substr(attendance_date, 1, 7) = ? ORDER BY attendance_date", groupId, month);
@@ -67,7 +67,35 @@ attendanceRouter.get("/group/:id", requirePermission("attendance.view"), (req: A
     JOIN subject_assignments a ON a.id = am.assignment_id JOIN subjects s ON s.id = a.subject_id
     JOIN enrollments e ON e.id = ar.enrollment_id JOIN students st ON st.id = e.student_id
     WHERE a.group_id = ? AND am.month = ? ORDER BY s.name, student_name`, groupId, month);
-  res.json({ group, date, day, days, students, legacy });
+  const monthSettings = get("SELECT class_days, revision FROM group_month_class_days WHERE group_id = ? AND month = ?", groupId, month)
+    ?? { class_days: null, revision: 0 };
+  res.json({ group, date, day, days, students, legacy, monthSettings });
+});
+
+attendanceRouter.put("/group/:id/month", requirePermission("attendance.manage"), (req: AuthenticatedRequest, res) => {
+  const groupId = asId(req.params.id, "Grupo");
+  groupDetails(groupId, req.user);
+  const month = String(req.body.month ?? "");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new ApiError(400, "Selecciona un mes válido.");
+  validDate(`${month}-01`);
+  const daysInMonth = new Date(`${month}-01T12:00:00Z`);
+  daysInMonth.setUTCMonth(daysInMonth.getUTCMonth() + 1, 0);
+  const classDays = req.body.classDays;
+  if (!Number.isInteger(classDays) || classDays < 0 || classDays > daysInMonth.getUTCDate()) {
+    throw new ApiError(400, `Los días de clase deben ser un entero entre 0 y ${daysInMonth.getUTCDate()}.`);
+  }
+  transaction(() => {
+    const previous = get<any>("SELECT * FROM group_month_class_days WHERE group_id = ? AND month = ?", groupId, month);
+    if (req.body.revision !== (previous?.revision ?? 0)) throw new ApiError(409, "Otro usuario cambió los días de clase. Recarga la lista antes de guardar.");
+    const confirmed = get<{ count: number }>("SELECT COUNT(*) AS count FROM attendance_days WHERE group_id = ? AND substr(attendance_date, 1, 7) = ? AND status = 'confirmed'", groupId, month)!;
+    if (classDays < confirmed.count) throw new ApiError(400, `Ya hay ${confirmed.count} días confirmados. El total de clases no puede ser menor.`);
+    run(`INSERT INTO group_month_class_days(group_id, month, class_days, updated_by) VALUES (?, ?, ?, ?)
+      ON CONFLICT(group_id, month) DO UPDATE SET class_days = excluded.class_days,
+        revision = group_month_class_days.revision + 1, updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
+    groupId, month, classDays, req.user!.id);
+    logActivity(req, "set-month-class-days", "group_month_class_days", `${groupId}:${month}`, { previous: previous?.class_days ?? null, classDays });
+  });
+  res.json({ message: "Días de clase guardados. Porcentajes mensuales actualizados." });
 });
 
 attendanceRouter.put("/group/:id", requirePermission("attendance.manage"), (req: AuthenticatedRequest, res) => {
@@ -81,6 +109,11 @@ attendanceRouter.put("/group/:id", requirePermission("attendance.manage"), (req:
   const result = transaction(() => {
     const current = get<any>("SELECT * FROM attendance_days WHERE group_id = ? AND attendance_date = ?", groupId, date);
     if ((current?.revision ?? 0) !== revision) throw new ApiError(409, "Otro usuario actualizó esta lista. Recarga la fecha para ver sus cambios antes de guardar.");
+    if (confirm && current?.status !== "confirmed") {
+      const settings = get<{ class_days: number }>("SELECT class_days FROM group_month_class_days WHERE group_id = ? AND month = ?", groupId, date.slice(0, 7));
+      const confirmed = get<{ count: number }>("SELECT COUNT(*) AS count FROM attendance_days WHERE group_id = ? AND substr(attendance_date, 1, 7) = ? AND status = 'confirmed'", groupId, date.slice(0, 7))!;
+      if (settings && confirmed.count >= settings.class_days) throw new ApiError(409, "Se alcanzó el total de días de clase del mes. Actualiza ese total antes de confirmar otro día.");
+    }
     const students = roster(groupId, date);
     const validEnrollments = new Map(students.map((s) => [s.enrollment_id, s]));
     const submitted = new Set<number>();

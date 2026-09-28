@@ -372,6 +372,56 @@ describe("Aula Nova API", () => {
     expect(grade.status).toBe(200);
   });
 
+  it("uses the group's configured class days for monthly attendance and validates totals", async () => {
+    const auth = { Authorization: `Bearer ${token}` };
+    const groups = await request(app).get("/api/attendance/groups").set(auth);
+    const group = groups.body.find((g: any) => g.group_name === "1A");
+    const before = await request(app).get(`/api/attendance/group/${group.id}?date=2026-08-01`).set(auth);
+    const target = before.body.students.find((s: any) => s.summary.attended_days === 8);
+    const setDays = (month: string, classDays: unknown, revision = 0) => request(app)
+      .put(`/api/attendance/group/${group.id}/month`).set(auth).send({ month, classDays, revision });
+    await setDays("2026-08", 20).expect(200);
+    const after = await request(app).get(`/api/attendance/group/${group.id}?date=2026-08-15`).set(auth);
+    expect(after.body.monthSettings).toMatchObject({ class_days: 20, revision: 1 });
+    expect(after.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).summary)
+      .toMatchObject({ scheduled_days: 20, attended_days: 8, percentage: 40 });
+    const assignments = await request(app).get("/api/grades/assignments").set(auth);
+    for (const a of assignments.body.filter((a: any) => a.group_id === group.id)) {
+      const roster = await request(app).get(`/api/grades/assignment/${a.id}/roster`).set(auth);
+      expect(roster.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).eligibility.attendancePercentage).toBe(40);
+    }
+    const login = await request(app).post("/api/auth/login").send({ email: "an26001@alumnoifop.edu", password: "Alumno123!" });
+    const portal = await request(app).get("/api/portal").set("Authorization", `Bearer ${login.body.token}`);
+    const monthly = portal.body.attendance.find((m: any) => m.month === "2026-08");
+    expect(monthly.scheduled_days).toBe(20);
+    expect(monthly.percentage).toBe(monthly.attended_days / 20 * 100);
+    await setDays("2026-08", 9, 1).expect(400);
+    await setDays("2026-08", 21, 0).expect(409);
+    await setDays("2026-02", 29).expect(400);
+    await setDays("2026-02", -1).expect(400);
+    await setDays("2026-02", 2.5).expect(400);
+    await setDays("2026-02", "").expect(400);
+    await setDays("2026-13", 20).expect(400);
+    await setDays("2028-02", 29).expect(200);
+    await setDays("2026-03", 0).expect(200);
+    const empty = await request(app).get(`/api/attendance/group/${group.id}?date=2026-03-01`).set(auth);
+    expect(empty.body.students[0].summary).toMatchObject({ scheduled_days: 0, attended_days: 0, percentage: 0 });
+    await setDays("2026-04", 20).expect(200);
+    const noLists = await request(app).get(`/api/attendance/group/${group.id}?date=2026-04-01`).set(auth);
+    expect(noLists.body.students[0].summary).toMatchObject({ scheduled_days: 20, attended_days: 0, percentage: 0 });
+    await setDays("2026-08", 10, 1).expect(200);
+    await request(app).put(`/api/attendance/group/${group.id}`).set(auth).send({ date: "2026-08-11", revision: 1, confirm: true,
+      records: before.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" })) }).expect(409);
+    const anotherGroup = groups.body.find((g: any) => g.id !== group.id);
+    const other = await request(app).get(`/api/attendance/group/${anotherGroup.id}?date=2026-08-01`).set(auth);
+    expect(other.body.monthSettings.class_days).toBeNull();
+    const teacher = await request(app).post("/api/auth/login").send({ email: "laura.mendez@aulanova.edu.mx", password: "Docente123!" });
+    await request(app).put(`/api/attendance/group/${anotherGroup.id}/month`).set("Authorization", `Bearer ${teacher.body.token}`)
+      .send({ month: "2026-08", classDays: 20, revision: 0 }).expect(403);
+    await request(app).put(`/api/attendance/group/${group.id}/month`).set("Authorization", `Bearer ${login.body.token}`)
+      .send({ month: "2026-08", classDays: 20, revision: 2 }).expect(403);
+  });
+
   it("creates a complete academic plan with mandatory and elective subjects", async () => {
     const programs = await request(app).get("/api/catalogs/programs").set("Authorization", `Bearer ${token}`);
     const programId = programs.body.records[0].id;

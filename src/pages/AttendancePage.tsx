@@ -9,6 +9,7 @@ type Group = { id: number; group_name: string; program_name: string; study_modal
 type Mark = "present" | "absent" | "";
 type AttendanceData = {
   group: Group; date: string;
+  monthSettings: { class_days: number | null; revision: number };
   day: { status: "draft" | "confirmed"; revision: number; confirmed_at: string | null };
   days: Array<{ attendance_date: string; status: "draft" | "confirmed" }>;
   students: Array<{ enrollment_id: number; student_number: string; student_name: string; status: Mark | null; notes: string | null;
@@ -32,6 +33,7 @@ export function AttendancePage() {
   const [records, setRecords] = useState<Record<number, { status: Mark; notes: string }>>({});
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [classDays, setClassDays] = useState("");
   const requestId = useRef(0);
 
   async function loadAttendance(group: Group, targetDate: string) {
@@ -44,6 +46,7 @@ export function AttendancePage() {
       const result = await api<AttendanceData>(`/attendance/group/${group.id}?date=${targetDate}`);
       if (id !== requestId.current) return;
       setData(result);
+      setClassDays(result.monthSettings.class_days == null ? "" : String(result.monthSettings.class_days));
       setDirty(false);
       setRecords(Object.fromEntries(result.students.map((student) => [student.enrollment_id, { status: student.status ?? "", notes: student.notes ?? "" }])));
     } catch (error) {
@@ -57,7 +60,7 @@ export function AttendancePage() {
   }, []);
 
   function changeSelection(group: Group, targetDate: string) {
-    if (dirty && !window.confirm("Hay cambios sin guardar. ¿Quieres cambiar de lista y descartarlos?")) return;
+    if ((dirty || monthDirty) && !window.confirm("Hay cambios sin guardar. ¿Quieres cambiar de lista y descartarlos?")) return;
     void loadAttendance(group, targetDate);
   }
 
@@ -80,6 +83,25 @@ export function AttendancePage() {
     finally { setBusy(false); }
   }
 
+  async function saveClassDays() {
+    if (!selected || !data || !canManage || classDays === "") return;
+    setBusy(true);
+    try {
+      const result = await api<{ message: string }>(`/attendance/group/${selected.id}/month`, {
+        method: "PUT", body: { month: data.date.slice(0, 7), classDays: Number(classDays), revision: data.monthSettings.revision }
+      });
+      toast.success(result.message);
+      const refreshed = await api<AttendanceData>(`/attendance/group/${selected.id}?date=${data.date}`);
+      // Keep unsaved daily marks and their revision while refreshing only monthly calculations.
+      setData({ ...data, monthSettings: refreshed.monthSettings, students: data.students.map((student) => ({
+        ...student, summary: refreshed.students.find((s) => s.enrollment_id === student.enrollment_id)?.summary ?? student.summary
+      })) });
+      setClassDays(String(refreshed.monthSettings.class_days));
+    } catch (error) { toast.error(error instanceof Error ? error.message : "No fue posible guardar los días de clase."); }
+    finally { setBusy(false); }
+  }
+
+  const monthDirty = classDays !== (data?.monthSettings.class_days == null ? "" : String(data.monthSettings.class_days));
   const pending = data?.students.filter((student) => !records[student.enrollment_id]?.status).length ?? 0;
   return <div className="attendance-page page-stack">
     <section className="toolbar">
@@ -97,16 +119,24 @@ export function AttendancePage() {
         {data && selected ? <>
           <header className="attendance-heading"><div><span>{selected.cycle_name} · {data.date}</span><h2>Grupo {selected.group_name}</h2><p>{selected.study_modality || "Todas las materias"} · Una lista por día</p></div><StatusBadge active={data.day.status === "confirmed"} label={dirty ? "CAMBIOS SIN GUARDAR" : data.day.status === "confirmed" ? "DÍA CONFIRMADO" : "BORRADOR"} /></header>
           <div className="attendance-controls">
+            <Field label={`Días de clase del grupo en ${data.date.slice(0, 7)}`} hint="Total mensual para calcular el porcentaje de todos los alumnos.">
+              <input type="number" min={0} max={new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 0).getDate()} step={1} value={classDays} disabled={busy || !canManage} placeholder="Sin configurar" onChange={(event) => setClassDays(event.target.value)} />
+            </Field>
+            {canManage && <Button variant="secondary" busy={busy} disabled={classDays === "" || !monthDirty} onClick={saveClassDays}>Guardar días de clase</Button>}
+          </div>
+          <div className="attendance-controls">
             {canManage && <>
               <Button variant="secondary" disabled={busy || !data.students.length} icon={<CheckCheck size={17} />} onClick={() => { setRecords((current) => Object.fromEntries(data.students.map((s) => [s.enrollment_id, { ...current[s.enrollment_id], status: "present" }]))); setDirty(true); }}>Todos presentes</Button>
-              <Button variant="secondary" disabled={!data.students.length} icon={<Save size={17} />} busy={busy} onClick={() => save(false)}>Guardar borrador</Button>
-              <Button disabled={pending > 0 || !data.students.length} icon={<CalendarCheck size={17} />} busy={busy} onClick={() => save(true)}>Confirmar día</Button>
+              <Button variant="secondary" disabled={!data.students.length || monthDirty} icon={<Save size={17} />} busy={busy} onClick={() => save(false)}>Guardar borrador</Button>
+              <Button disabled={pending > 0 || !data.students.length || monthDirty} icon={<CalendarCheck size={17} />} busy={busy} onClick={() => save(true)}>Confirmar día</Button>
             </>}
             <Button variant="ghost" disabled={busy} onClick={() => changeSelection(selected, date)}>Recargar lista</Button>
             <span>{pending ? `${pending} alumnos sin marcar` : "Lista completa"}</span>
           </div>
-          <p>El resumen mensual cuenta únicamente días confirmados. Un día sin lista no se cuenta como falta.</p>
-          <div className="table-wrap"><table><thead><tr><th>Matrícula</th><th>Alumno</th><th>Asistencia del día</th><th>Días presentes / registrados en el mes</th><th>Porcentaje mensual</th><th>Observaciones</th></tr></thead><tbody>
+          <p>{monthDirty ? "Guarda primero los días de clase modificados. " : ""}{data.monthSettings.class_days == null
+            ? "Sin total configurado: el porcentaje usa los días confirmados. Captura los días de clase para usar el total real del mes."
+            : `Porcentaje mensual = días presentes confirmados ÷ ${data.monthSettings.class_days} días de clase × 100. Las listas pendientes no suman asistencias ni crean faltas automáticamente.`}</p>
+          <div className="table-wrap"><table><thead><tr><th>Matrícula</th><th>Alumno</th><th>Asistencia del día</th><th>Días presentes / días de clase del mes</th><th>Porcentaje mensual</th><th>Observaciones</th></tr></thead><tbody>
             {data.students.map((student) => <tr key={student.enrollment_id}>
               <td><strong>{student.student_number}</strong></td><td><strong className="table-main">{student.student_name}</strong></td>
               <td><select aria-label={`Asistencia de ${student.student_name}`} disabled={busy || !canManage} value={records[student.enrollment_id]?.status ?? ""} onChange={(event) => updateRecord(student.enrollment_id, { status: event.target.value as Mark })}><option value="">Sin registrar</option><option value="present">Presente</option><option value="absent">Falta</option></select></td>

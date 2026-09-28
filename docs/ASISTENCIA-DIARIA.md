@@ -4,7 +4,9 @@ En **Asistencia**, selecciona un grupo y una fecha. Marca **Presente** o **Falta
 
 Cada alumno tiene como máximo un registro por fecha, incluso si cambia de grupo. Una misma lista sirve para todas sus materias: ya no se captura asistencia por asignatura ni se escribe un total mensual de clases.
 
-El resumen del mes y el porcentaje para evaluación se calculan a partir de días confirmados. Los borradores y los días sin lista no se consideran faltas. Para evaluación, se usa la asistencia del alumno en su ciclo escolar, común a todas sus asignaciones. Continúan vigentes el mínimo de 80% y la validación de inscripción/reinscripción pagada.
+En **Días de clase del grupo**, captura el total real del mes de la fecha seleccionada y pulsa **Guardar días de clase**. Cada grupo y mes conserva su propio total. El porcentaje mensual es **días presentes confirmados / días de clase × 100**: 8 asistencias de 20 días equivalen a 40%. El total también se usa en el portal y para evaluación. Se permite cero si no hubo clases; no se permite un total menor que los días ya confirmados ni mayor que los días del calendario del mes. Para confirmar más días, primero aumenta el total.
+
+Mientras no se configure un total, se mantiene el cálculo anterior basado en días confirmados. Los borradores y los días sin lista no crean faltas automáticamente, pero tampoco suman asistencias al total mensual configurado. Para evaluación se usa la asistencia del alumno en su ciclo escolar, común a todas sus asignaciones. Continúan vigentes el mínimo de 80% y la validación de inscripción/reinscripción pagada.
 
 El portal del alumno muestra un resumen mensual de días presentes y registrados, sin repetir cada materia. Las listas institucionales para imprimir se generan una vez por grupo, con alcance a todas las materias.
 
