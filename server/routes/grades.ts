@@ -1,5 +1,7 @@
 ﻿import { Router } from "express";
 import multer from "multer";
+import ExcelJS from "exceljs";
+import { documentBranding, workbookInstitutionLogo } from "../services/document-branding.js";
 import { fileURLToPath } from "node:url";
 import { actaOptions, previewActa, type GradeImportRow, type ImportError } from "../services/grade-acta.js";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
@@ -462,12 +464,19 @@ gradesRouter.get("/import/options", requirePermission("grades.import"), (req: Au
   res.json(actaOptions(req.user));
 });
 
-gradesRouter.get("/template/import.xlsx", requirePermission("grades.import"), (_req, res) => {
-  res.download(fileURLToPath(new URL("../templates/acta-calificaciones.xlsx", import.meta.url)), "ACTA DE CALIFICACIONES POR MATERIA.xlsx");
+gradesRouter.get("/template/import.xlsx", requirePermission("grades.import"), async (_req, res) => {
+  const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(fileURLToPath(new URL("../templates/acta-calificaciones.xlsx",import.meta.url)));
+  const brand=documentBranding(),image=workbookInstitutionLogo(workbook);workbook.creator=brand.name;
+  for(const sheet of workbook.worksheets){const title=String(sheet.getCell("A1").value??sheet.name);sheet.getCell("A1").value=`${brand.name}\n${brand.campus}\n${title}`;sheet.getCell("A1").font={name:"Arial",size:13,bold:true,color:{argb:"FF172951"}};sheet.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};sheet.getRow(1).height=90;
+    if(image!==null)sheet.addImage(image,{tl:{col:.12,row:.15},ext:{width:60,height:60}});
+    sheet.pageSetup.printTitlesRow="1:5";sheet.pageSetup.fitToPage=true;sheet.pageSetup.fitToWidth=1;sheet.pageSetup.fitToHeight=0;
+    sheet.headerFooter ??= {};sheet.headerFooter.oddFooter=`&L${brand.name} · ${brand.campus}&R Página &P de &N`;
+  }
+  const buffer=await workbook.xlsx.writeBuffer();res.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").attachment("ACTA DE CALIFICACIONES POR MATERIA.xlsx").send(Buffer.from(buffer));
 });
 
 gradesRouter.get("/template/legacy.xlsx", requirePermission("grades.import"), (_req, res) => {
-  sendWorkbook(res, "plantilla-calificaciones.xlsx", "Calificaciones", [{
+  return sendWorkbook(res, "plantilla-calificaciones.xlsx", "Calificaciones", [{
     Matricula: "0825AMRLEESC",
     Alumno: "Nombre de referencia opcional",
     Grupo: "GENERACION 2025-2028 A-ESCOLARIZADO",

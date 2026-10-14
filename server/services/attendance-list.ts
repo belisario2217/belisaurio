@@ -449,7 +449,7 @@ export function sendAttendancePdf(
   const month = monthLabel(monthInput);
   const settings = attendanceSettings();
   const pages = attendancePages(groupId);
-  const doc = createPdf(res, "lista-asistencia.pdf", { layout: "landscape", margin: 20 });
+  const doc = createPdf(res, "lista-asistencia.pdf", { layout: "landscape", margin: 20 }, false);
   pages.forEach((page, index) => {
     if (index > 0) doc.addPage({ size: "LETTER", layout: "landscape", margin: 20 });
     drawAttendancePdfPage(doc, page, settings, mode, month);

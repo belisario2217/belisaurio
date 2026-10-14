@@ -481,7 +481,7 @@ studentsRouter.delete("/:id/permanent", requirePermission("students.manage"), (r
 });
 
 studentsRouter.get("/template/import.xlsx", requirePermission("students.import"), (_req, res) => {
-  sendWorkbook(res, "plantilla-alumnos.xlsx", "Alumnos", [{
+  return sendWorkbook(res, "plantilla-alumnos.xlsx", "Alumnos", [{
     "Nombre(s)": "Andrea",
     "Apellido paterno": "López",
     "Apellido materno": "Morales",

@@ -165,3 +165,9 @@ En **Finanzas → Nómina** se configuran docentes con horas semanales y tarifa 
 En **Balance → Nuevo egreso** se registran renta, servicios, materiales y otros conceptos de la escuela. Los ingresos se toman de los cobros registrados; solo los egresos pagados se restan. Los filtros mensuales y los reportes CSV permiten revisar el detalle.
 
 En **Alumnos**, pulsa el nombre para abrir el expediente y consultar su avance. Desde ahí puedes marcar Próximo a egresar. **Reportes** y **Documentos** tienen entradas diferentes en el menú. El **Asistente de archivos** lee hojas, tablas o páginas, propone las columnas y aprende las reglas que confirmes.
+
+## Membrete en PDF y Excel
+
+Los documentos generados utilizan el logo y el nombre de la escuela configurados en **Configuración**, con Campus Frontera y los datos de contacto disponibles. Los reportes PDF repiten el membrete en cada página; las hojas Excel incluyen logo, encabezado institucional, fecha de emisión y encabezados de impresión. Las constancias, listas de asistencia, boletas y estados de cuenta conservan sus formatos institucionales.
+
+Las plantillas Excel también incluyen membrete. Sus columnas, celdas de captura y fórmulas siguen funcionando para volver a importar el archivo. Puedes actualizar el logo o los datos de la escuela desde Configuración; los cambios se reflejan en las nuevas descargas.

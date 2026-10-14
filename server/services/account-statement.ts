@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Response } from "express";
 import ExcelJS from "exceljs";
 import { createPdf } from "./files.js";
+import { workbookInstitutionLogo } from "./document-branding.js";
 import { institutionLogoFile } from "./institution-logo.js";
 
 const statementPlace = "Frontera, Centla, Tab.";
@@ -329,7 +330,7 @@ export function sendAccountStatementPdf(
   const issued = localIssuedParts(new Date());
   const code = verificationCode(data, issued);
   const primary = normalizedHex(settings.primary_color, "#17324D");
-  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margin: 36, bufferPages: true });
+  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margin: 36, bufferPages: true }, false);
   const payments = data.billing.payments;
   const pageCount = Math.max(1, Math.ceil(payments.length / rowsPerPdfPage));
   for (let page = 0; page < pageCount; page += 1) {
@@ -626,12 +627,15 @@ function buildMovementsSheet(
   const primary = normalizedHex(settings.primary_color, "#17324D");
   const primaryArgb = argb(primary);
   [14, 18, 28, 15, 18, 17, 20, 34].forEach((width, index) => { worksheet.getColumn(index + 1).width = width; });
-  mergedValue(worksheet, "A1:H1", "DETALLE COMPLETO DE MOVIMIENTOS", {
+  mergedValue(worksheet, "A1:H1", `${settings.institution_name || "Universidad IFOP"}\nCAMPUS FRONTERA\nDETALLE COMPLETO DE MOVIMIENTOS`, {
     fill: { type: "pattern", pattern: "solid", fgColor: { argb: primaryArgb } },
     font: { name: "Aptos", bold: true, size: 16, color: { argb: "FFFFFFFF" } },
     alignment: { horizontal: "center", vertical: "middle" }
   });
-  worksheet.getRow(1).height = 28;
+  worksheet.getRow(1).height = 80;
+  worksheet.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};
+  const movementsLogo=workbookInstitutionLogo(workbook);
+  if(movementsLogo!==null)worksheet.addImage(movementsLogo,{tl:{col:.1,row:.1},ext:{width:64,height:64}});
   mergedValue(worksheet, "A2:H2", `${data.student.student_number} | ${data.student.student_name} | ${data.student.program_name}`, {
     fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDF3F0" } },
     font: { name: "Aptos", italic: true, size: 9, color: { argb: "FF334155" } },

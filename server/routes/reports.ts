@@ -6,7 +6,6 @@ import { sendAttendancePdf, sendAttendanceWorkbook } from "../services/attendanc
 import { syncGroupSubjects } from "../services/group-subjects.js";
 import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
 import { sendStudyCertificate } from "../services/study-certificate.js";
-import { institutionLogoFile } from "../services/institution-logo.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 
 export const reportsRouter = Router();
@@ -375,14 +374,7 @@ function drawReportCard(doc: PDFKit.PDFDocument, studentId: number, periodId?: n
   const failed = completed.some((item) => item.final_score != null && item.final_score < item.passing_score);
   const status = !completed.length ? "Pendiente" : failed ? "Reprobado" : "Aprobado";
   const primary = settings.primary_color || "#102a43";
-  const secondary = settings.secondary_color || "#f97360";
 
-  const logo = institutionLogoFile(settings.logo_path);
-  if (logo) doc.image(logo, 42, 36, { fit: [70, 70] });
-  doc.fillColor(primary).font("Helvetica-Bold").fontSize(19).text(settings.institution_name, 125, 44);
-  doc.fillColor("#627d98").font("Helvetica").fontSize(9).text(settings.address || "", 125, 70);
-  doc.text(`${settings.phone || ""}  ${settings.email || ""}`, 125, 84);
-  doc.moveTo(42, 116).lineTo(570, 116).lineWidth(3).strokeColor(secondary).stroke();
   doc.fillColor(primary).font("Helvetica-Bold").fontSize(16).text("Boleta de calificaciones", 42, 134);
   doc.fillColor("#334e68").font("Helvetica").fontSize(10);
   doc.text(`Alumno: ${student.name}`, 42, 166);
@@ -414,13 +406,12 @@ function drawReportCard(doc: PDFKit.PDFDocument, studentId: number, periodId?: n
   }
   const signatureY = Math.max(doc.y + 28, 620);
   if (signatureY > 690) doc.addPage();
-  const finalSignatureY = signatureY > 690 ? 96 : signatureY;
+  const finalSignatureY = signatureY > 690 ? 150 : signatureY;
   doc.moveTo(80, finalSignatureY).lineTo(260, finalSignatureY).strokeColor("#9fb3c8").stroke();
   doc.moveTo(350, finalSignatureY).lineTo(530, finalSignatureY).stroke();
   doc.fillColor("#627d98").fontSize(8).text(settings.director_name || "Responsable academico", 80, finalSignatureY + 6, { width: 180, align: "center" });
   doc.text("Firma del padre, madre o tutor", 350, finalSignatureY + 6, { width: 180, align: "center" });
-  doc.fontSize(7).text(settings.footer_text || "", 42, 735, { width: 528, align: "center" });
-  doc.text(`Fecha de emision: ${new Date().toLocaleDateString("es-MX")}`, 42, 747, { width: 528, align: "center" });
+
 }
 
 reportsRouter.get("/report-card.pdf", requirePermission("reports.generate"), (req, res) => {

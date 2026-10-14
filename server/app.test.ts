@@ -140,7 +140,9 @@ describe("Aula Nova API", () => {
     const auth = { Authorization: `Bearer ${token}` };
     const template = await request(app).get("/api/grades/template/import.xlsx").set(auth).buffer(true).parse(binaryParser);
     expect(template.status).toBe(200);
-    expect(template.body.equals(fs.readFileSync("server/templates/acta-calificaciones.xlsx"))).toBe(true);
+    const brandedActa = XLSX.read(template.body,{type:"buffer"});
+    expect(brandedActa.Sheets[brandedActa.SheetNames[0]].A1.v).toContain("Universidad IFOP");
+    expect(brandedActa.Sheets[brandedActa.SheetNames[0]].A1.v).toContain("ACTA GRUPAL DE CALIFICACIONES");
     const options = await request(app).get("/api/grades/import/options").set(auth);
     expect(options.status).toBe(200);
     const option = options.body.find((a: any) => a.subject_code === "COM-101" && a.group_name === "1A");
@@ -165,6 +167,7 @@ describe("Aula Nova API", () => {
     const apply = (id: string, mode = "update") => request(app).post("/api/grades/import/apply").set(auth).send({ previewId: id, existingMode: mode });
     const first = await preview(makeActa([8, "9,5", 10]));
     expect(first.status).toBe(200);
+    expect(first.body.errors).toEqual([]);
     expect(first.body.summary).toMatchObject({ total: 1, valid: 1, errors: 0 });
     expect(first.body.rows[0].resultingPartials).toEqual([8, 9.5, 10]);
     expect((await apply(first.body.previewId)).status).toBe(200);

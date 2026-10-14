@@ -491,7 +491,7 @@ paymentsRouter.get("/students", requirePermission("payments.view"), (req, res) =
 });
 
 paymentsRouter.get("/template/import.xlsx", requirePermission("payments.manage"), (_req, res) => {
-  sendWorkbook(res, "plantilla-pagos.xlsx", "Pagos", [{
+  return sendWorkbook(res, "plantilla-pagos.xlsx", "Pagos", [{
     Matricula: "0825AMRLEESC",
     "Numero de folio fisico": "0001",
     Fecha: "2026-07-08",
@@ -938,7 +938,6 @@ paymentsRouter.get("/report", requirePermission("payments.export"), (req, res) =
   pdfTable(doc, ["Folio", "Fecha", "Matricula", "Alumno", "Grupo", "Monto"], records.map((row) => [
     row.Folio, row.Fecha, row.Matricula, row.Alumno, row.Grupo, money(row.Monto)
   ]), [92, 72, 92, 210, 82, 82]);
-  doc.fontSize(7).fillColor("#627d98").text(`Generado: ${new Date().toLocaleString("es-MX")}`, 42, 555, { width: 708, align: "center" });
   doc.end();
 });
 

@@ -54,7 +54,7 @@ export function previewActa(buffer: Buffer, body: Record<string, unknown>, user:
   let workbook: XLSX.WorkBook;
   try { workbook = XLSX.read(buffer, { type: "buffer" }); }
   catch { throw new ApiError(400, "No se pudo leer el archivo. Guarda una copia válida de Excel e inténtalo de nuevo."); }
-  const sheets = workbook.SheetNames.filter((name) => normalizeActaText(workbook.Sheets[name].A1?.v) === "acta grupal de calificaciones");
+  const sheets = workbook.SheetNames.filter((name) => normalizeActaText(workbook.Sheets[name].A1?.v).endsWith("acta grupal de calificaciones"));
   if (!sheets.length) return null;
   const groupId = asId(body.groupId, "Grupo");
   const assignmentIds = idList(body.assignmentIds, "las materias");
