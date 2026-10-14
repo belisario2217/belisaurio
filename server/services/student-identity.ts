@@ -1,7 +1,7 @@
 import { get } from "../db.js";
 import { ApiError } from "../utils.js";
 
-export type StudyModality = "escolarizado" | "semiescolarizado" | "complementario";
+export type StudyModality = "escolarizado" | "semiescolarizado" | "complementario" | "en_linea";
 
 type IdentityInput = {
   firstName: string;
@@ -36,7 +36,8 @@ type ProgramContext = {
 const modalityCodes: Record<StudyModality, string> = {
   escolarizado: "ESC",
   semiescolarizado: "SEM",
-  complementario: "COM"
+  complementario: "COM",
+  en_linea: "LIN"
 };
 
 function normalized(value: unknown) {

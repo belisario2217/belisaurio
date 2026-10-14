@@ -76,7 +76,7 @@ function groupRoster(groupId: number) {
      LEFT JOIN academic_plans plan ON plan.id = e.plan_id
      LEFT JOIN curricular_periods curricular ON curricular.id = e.curricular_period_id
      WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1
-     ORDER BY st.last_name, st.second_last_name, st.first_name`,
+     ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     groupId
   );
   return students.map((student) => ({ ...student, promotion: promotionEligibility(student.enrollment_id) }));

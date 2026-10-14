@@ -1,9 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import request from "supertest";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
+
+afterEach(() => vi.useRealTimers());
 
 const testDb = path.resolve("data/test-school.db");
 for (const suffix of ["", "-shm", "-wal"]) {
@@ -232,7 +234,7 @@ describe("Aula Nova API", () => {
     const incomplete = await request(app).get("/api/portal").set("Authorization", `Bearer ${login.body.token}`);
     const partialSubject = incomplete.body.subjects.find((s: any) => s.code === "COM-101");
     expect([partialSubject.partial_1, partialSubject.partial_2, partialSubject.partial_3]).toEqual([null, 8, null]);
-    expect(partialSubject.status).toBe("pending");
+    expect(partialSubject.status).toBe("in_progress");
   });
 
   it("restricts teachers to their groups and shares daily attendance across subjects", async () => {
@@ -504,6 +506,9 @@ describe("Aula Nova API", () => {
   });
 
   it("manages student tuition payments and exports account statements", async () => {
+    // The fixture covers August and September; keep its accounting cutoff deterministic.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-15T18:00:00Z"));
     const programs = await request(app).get("/api/catalogs/programs").set("Authorization", `Bearer ${token}`);
     const programId = programs.body.records.find((program: any) => program.name === "Bachillerato General").id;
     await request(app)

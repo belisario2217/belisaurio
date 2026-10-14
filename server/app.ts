@@ -20,6 +20,9 @@ import { portalRouter } from "./routes/portal.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { messagesRouter } from "./routes/messages.js";
 import { groupManagementRouter } from "./routes/group-management.js";
+import { payrollRouter } from "./routes/payroll.js";
+import { improvementsRouter } from "./routes/improvements.js";
+import { importAssistantRouter } from "./routes/import-assistant.js";
 import { attendanceRouter } from "./routes/attendance.js";
 import { ensureAllStudentAccounts } from "./services/student-account.js";
 import { defaultInstitutionLogoUrl, institutionLogoPublicUrl } from "./services/institution-logo.js";
@@ -64,6 +67,9 @@ app.use("/api/payments", authenticate, paymentsRouter);
 app.use("/api/messages", authenticate, messagesRouter);
 app.use("/api/group-management", authenticate, groupManagementRouter);
 app.use("/api/attendance", authenticate, attendanceRouter);
+app.use("/api/payroll", authenticate, payrollRouter);
+app.use("/api/improvements", authenticate, improvementsRouter);
+app.use("/api/import-assistant", authenticate, importAssistantRouter);
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(root, "dist")));

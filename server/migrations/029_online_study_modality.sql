@@ -1,0 +1,2 @@
+-- Rebuild groups transactionally in db.ts, preserving rows, references, indexes and triggers.
+-- Adds en_linea to the existing CHECK constraint without changing existing modalities.

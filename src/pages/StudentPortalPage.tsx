@@ -69,7 +69,7 @@ type PortalData = {
     partial_2: number | null;
     partial_3: number | null;
     final_score: number | null;
-    status: "pending" | "passed" | "failed" | null;
+    status: "pending" | "in_progress" | "passed" | "failed" | null;
   }>;
 };
 
@@ -221,7 +221,7 @@ export function StudentPortalPage() {
                     <td key={index}><span className={score == null ? "partial-empty" : "partial-score"}>{score == null ? "-" : Number(score).toFixed(1)}</span></td>
                   ))}
                   <td><strong className={subject.final_score == null ? "" : subject.status === "passed" ? "grade-pass-text" : subject.status === "failed" ? "grade-fail-text" : ""}>{subject.final_score == null ? "-" : Number(subject.final_score).toFixed(1)}</strong></td>
-                  <td>{subject.status === "passed" ? <StatusBadge active label="CURSADA" /> : subject.status === "failed" ? <StatusBadge label="Reprobada" /> : <StatusBadge label={subject.final_score == null ? "Por cursar" : "En curso"} />}</td>
+                  <td>{subject.status === "passed" ? <StatusBadge active label="CURSADA" /> : subject.status === "failed" ? <StatusBadge label="Reprobada" /> : <StatusBadge label={subject.status === "in_progress" ? "En curso" : "Por cursar"} />}</td>
                 </tr>
               ))}
             </tbody>

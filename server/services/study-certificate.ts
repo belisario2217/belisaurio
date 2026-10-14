@@ -14,6 +14,7 @@ type CertificateStudent = {
   enrollment_id: number;
   student_number: string;
   student_name: string;
+  curp: string | null;
   program_name: string;
   group_name: string;
   modality: string;
@@ -118,7 +119,7 @@ function displayScore(score: number | null) {
 }
 
 function modalityLabel(value: string) {
-  const labels: Record<string, string> = { escolarizado: "escolarizada", semiescolarizado: "semiescolarizada", complementario: "complementaria" };
+  const labels: Record<string, string> = { escolarizado: "escolarizada", semiescolarizado: "semiescolarizada", complementario: "complementaria", en_linea: "en línea" };
   return labels[value] ?? value;
 }
 
@@ -270,7 +271,7 @@ function completedSubjects(student: CertificateStudent) {
 export function getStudyCertificateData(studentId: number): StudyCertificateData {
   const settings = get<CertificateSettings>("SELECT * FROM institution_settings WHERE id = 1");
   const student = get<CertificateStudent>(
-    `SELECT st.id, e.id AS enrollment_id, st.student_number,
+    `SELECT st.id, e.id AS enrollment_id, st.student_number, st.curp,
      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name,
      p.name AS program_name, g.name AS group_name, COALESCE(g.study_modality, 'escolarizado') AS modality,
      sc.id AS cycle_id, sc.name AS cycle_name, sc.start_date AS cycle_start_date, sc.end_date AS cycle_end_date,
@@ -302,16 +303,22 @@ export function getStudyCertificateData(studentId: number): StudyCertificateData
   return { settings, student, calendar: certificateCalendar(student), currentSubjects: current, completedSubjects: completed, average };
 }
 
+export function certificateStudentTerm(curp: string | null) {
+  if (!curp || !/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp.trim().toUpperCase())) return "la persona estudiante";
+  return curp.trim().toUpperCase()[10] === "M" ? "la alumna" : "el alumno";
+}
+
 function drawFirstPageHeader(doc: PDFKit.PDFDocument, data: StudyCertificateData) {
   const logo = institutionLogoFile(data.settings.logo_path);
   if (logo) doc.image(logo, 272, 18, { fit: [68, 68], align: "center", valign: "center" });
   doc.fillColor("#050505").font("Helvetica-Bold").fontSize(19)
     .text(data.settings.institution_name.toUpperCase(), 72, 92, { width: 468, align: "center" });
+  doc.fontSize(12).text("CAMPUS FRONTERA", 72, 119, { width: 468, align: "center" });
   doc.fontSize(10.5).text("CONTROL ESCOLAR IFOP", 304, 153, { width: 258, align: "right" });
   doc.text("ASUNTO: CONSTANCIA DE ESTUDIOS", 270, 168, { width: 292, align: "right" });
   doc.text(`FRONTERA, CENTLA, TABASCO A; ${spanishDate()}`, 210, 183, { width: 352, align: "right" });
   doc.fontSize(11).text("A quien corresponda:", contentLeft, 216, { width: contentWidth });
-  doc.font("Helvetica").text(`La que suscribe, responsable de Control Escolar de ${data.settings.institution_name}, hace constar que la alumna:`, contentLeft, 252, { width: contentWidth, align: "justify", lineGap: 2 });
+  doc.font("Helvetica").text(`La que suscribe, responsable de Control Escolar de ${data.settings.institution_name}, hace constar que ${certificateStudentTerm(data.student.curp)}:`, contentLeft, 252, { width: contentWidth, align: "justify", lineGap: 2 });
   doc.font("Helvetica-Bold").fontSize(15).text(data.student.student_name.toUpperCase(), contentLeft, 305, { width: contentWidth, align: "center" });
   doc.y = 344;
 }
@@ -321,7 +328,8 @@ function drawContinuationHeader(doc: PDFKit.PDFDocument, data: StudyCertificateD
   if (logo) doc.image(logo, 281, 18, { fit: [50, 50], align: "center", valign: "center" });
   doc.fillColor("#111111").font("Helvetica-Bold").fontSize(15)
     .text(data.settings.institution_name.toUpperCase(), contentLeft, 70, { width: contentWidth, align: "center" });
-  doc.moveTo(contentLeft, 98).lineTo(564, 98).lineWidth(0.8).strokeColor("#333333").stroke();
+  doc.fontSize(10).text("CAMPUS FRONTERA", contentLeft, 88, { width: contentWidth, align: "center" });
+  doc.moveTo(contentLeft, 101).lineTo(564, 98).lineWidth(0.8).strokeColor("#333333").stroke();
   doc.fontSize(8.5).text(`${data.student.student_name.toUpperCase()} · ${data.student.student_number}`, contentLeft, 106, { width: contentWidth, align: "center" });
   doc.y = 130;
 }
@@ -377,7 +385,7 @@ function drawEnrollmentAndCurrentSubjects(doc: PDFKit.PDFDocument, data: StudyCe
     ? `, y un periodo vacacional del ${longDate(data.calendar.vacation_start)} al ${longDate(data.calendar.vacation_end)}`
     : "";
   doc.fillColor("#111111").font("Helvetica").fontSize(10.5).text(
-    `Se encuentra actualmente inscrita en esta institución, en el ${period} del programa: ${programName}, en la modalidad ${modalityLabel(data.student.modality)} con RVOE: ${rvoe}, matrícula: ${data.student.student_number}, en convenio educativo con la institución denominada “Centro Universitario Tecnológico de Enfermería” (UNITEN) CCT 18PSU0074C, cumpliendo un horario de ${attendanceDays(data.student.modality)}${schedule}, con periodo de actividades del ${longDate(data.calendar.activity_start)} al ${longDate(data.calendar.activity_end)}${vacation}.`,
+    `Se encuentra actualmente ${certificateStudentTerm(data.student.curp) === "el alumno" ? "inscrito" : certificateStudentTerm(data.student.curp) === "la alumna" ? "inscrita" : "con inscripción activa"} en esta institución, en el ${period} del programa: ${programName}, en la modalidad ${modalityLabel(data.student.modality)} con RVOE: ${rvoe}, matrícula: ${data.student.student_number}, en convenio educativo con la institución denominada “Centro Universitario Tecnológico de Enfermería” (UNITEN) CCT 18PSU0074C, cumpliendo un horario de ${attendanceDays(data.student.modality)}${schedule}, con periodo de actividades del ${longDate(data.calendar.activity_start)} al ${longDate(data.calendar.activity_end)}${vacation}.`,
     contentLeft, doc.y, { width: contentWidth, align: "justify", lineGap: 2 }
   );
   doc.moveDown(0.45).text("Se detallan a continuación las asignaturas inscritas:", { width: contentWidth });
@@ -437,7 +445,7 @@ function drawClosingAndSignature(doc: PDFKit.PDFDocument, data: StudyCertificate
   ensurePage(doc, data, 140, () => undefined);
   const averageText = data.average == null ? "sin promedio general disponible" : `${displayScore(data.average)} (${scoreInSpanish(data.average)})`;
   doc.moveDown(0.85).fillColor("#111111").font("Helvetica").fontSize(10.5)
-    .text(`Actualmente la estudiante tiene un promedio general de ${averageText}.`, contentLeft, doc.y, { width: contentWidth });
+    .text(`Actualmente ${certificateStudentTerm(data.student.curp) === "el alumno" ? "el estudiante" : certificateStudentTerm(data.student.curp) === "la alumna" ? "la estudiante" : "la persona estudiante"} tiene un promedio general de ${averageText}.`, contentLeft, doc.y, { width: contentWidth });
   doc.moveDown(0.35).text(`A petición de la parte interesada se expide la presente en la ciudad de Frontera, Centla, Tabasco, a ${issuanceDate()}.`, { width: contentWidth, align: "justify", lineGap: 2 });
   const signatureY = Math.max(doc.y + 55, 600);
   doc.moveTo(188, signatureY).lineTo(424, signatureY).lineWidth(0.8).strokeColor("#111111").stroke();

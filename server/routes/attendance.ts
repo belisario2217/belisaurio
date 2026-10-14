@@ -36,7 +36,7 @@ function roster(groupId: number, date: string) {
     WHERE ar.student_id IS NOT NULL OR (e.group_id = ? AND e.is_active = 1 AND st.is_active = 1
       AND NOT EXISTS (SELECT 1 FROM daily_attendance_records previous
         WHERE previous.student_id = st.id AND previous.group_id = ? AND previous.attendance_date = ?))
-    ORDER BY st.last_name, st.second_last_name, st.first_name`, groupId, date, groupId, groupId, date);
+    ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`, groupId, date, groupId, groupId, date);
 }
 
 attendanceRouter.get("/groups", requirePermission("attendance.view"), (req: AuthenticatedRequest, res) => {

@@ -27,7 +27,7 @@ type PortalSubject = {
   partial_2: number | null;
   partial_3: number | null;
   final_score: number | null;
-  status: "pending" | "passed" | "failed";
+  status: "pending" | "in_progress" | "passed" | "failed";
   comments: string | null;
 };
 
@@ -57,11 +57,11 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
     : null);
   const passingScore = Math.max(...rows.map((grade) => Number(grade.passing_score ?? 0)), 0);
   const status = partialMode && [partial_1, partial_2, partial_3].some((score) => score === null)
-    ? "pending"
+    ? "in_progress"
     : subject.explicit_status === "completed"
     ? "passed"
     : final_score == null
-      ? "pending"
+      ? subject.explicit_status === "in_progress" ? "in_progress" : "pending"
       : final_score >= passingScore
         ? "passed"
         : "failed";
@@ -80,9 +80,9 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
   };
 }
 
-portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedRequest, res) => {
+export function studentPortalData(studentId: number) {
   syncAcademicSubjectStatuses();
-  if (!req.user?.studentId) throw new ApiError(403, "Esta cuenta todavía no está vinculada con un alumno.");
+
   const enrollment = get<any>(
     `SELECT e.id AS enrollment_id, e.plan_id, e.group_id, e.enrolled_at,
      COALESCE(e.tuition_start_date, sc.start_date) AS billing_start_date, e.tuition_due_day,
@@ -102,7 +102,7 @@ portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedReque
      LEFT JOIN academic_plans pl ON pl.id = e.plan_id
      WHERE e.student_id = ? AND e.is_active = 1
      ORDER BY e.id DESC LIMIT 1`,
-    req.user.studentId
+    studentId
   );
   if (!enrollment) throw new ApiError(404, "No se encontró una inscripción activa para este alumno.");
 
@@ -218,7 +218,7 @@ portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedReque
     ? graded.reduce((sum, subject) => sum + Number(subject.final_score), 0) / graded.length
     : null;
 
-  res.json({
+  return {
     student: enrollment,
     progress: {
       totalCredits,
@@ -244,5 +244,9 @@ portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedReque
     attendance,
     messages,
     subjects
-  });
+  };
+}
+portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedRequest, res) => {
+  if (!req.user?.studentId) throw new ApiError(403, "Esta cuenta todavía no está vinculada con un alumno.");
+  res.json(studentPortalData(req.user.studentId));
 });

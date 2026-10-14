@@ -105,7 +105,8 @@ const definitions: Record<string, CatalogDefinition> = {
         options: [
           { value: "escolarizado", label: "Escolarizado (ESC)" },
           { value: "semiescolarizado", label: "Semiescolarizado (SEM)" },
-          { value: "complementario", label: "Complementario (COM)" }
+          { value: "complementario", label: "Complementario (COM)" },
+          { value: "en_linea", label: "En Línea (LIN)" }
         ]
       },
       { name: "capacity", label: "Capacidad", type: "number" }
@@ -299,7 +300,7 @@ catalogsRouter.get("/", requirePermission("catalogs.view"), (_req, res) => {
 
 catalogsRouter.get("/:type", requirePermission("catalogs.view"), (req, res) => {
   const catalog = definition(req.params.type);
-  const sql = `${catalog.listSql ?? `SELECT * FROM ${catalog.table}`} ORDER BY is_active DESC, id DESC`;
+  const sql = `SELECT * FROM (${catalog.listSql ?? `SELECT * FROM ${catalog.table}`}) AS catalog_records ORDER BY is_active DESC, spanish_sort(${catalog.table === 'teachers' ? 'full_name' : 'name'}), id`;
   res.json({ definition: { ...catalog, table: undefined, listSql: undefined }, records: all(sql) });
 });
 
@@ -324,6 +325,7 @@ catalogsRouter.post("/:type", requirePermission("catalogs.manage"), (req: Authen
      VALUES (${fields.map(() => "?").join(", ")})`,
     ...values
   );
+  if (catalog.table === "teachers") run("UPDATE teachers SET teacher_number=printf('DOC%05d',id) WHERE id=?", Number(result.lastInsertRowid));
   logActivity(req, "create", catalog.table, Number(result.lastInsertRowid), req.body);
   res.status(201).json(get(`SELECT * FROM ${catalog.table} WHERE id = ?`, Number(result.lastInsertRowid)));
 });

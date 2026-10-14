@@ -3,6 +3,7 @@ import multer from "multer";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { all, get, run, transaction } from "../db.js";
 import { createPdf, parseWorkbook, pdfTable, sendWorkbook, type TabularRow } from "../services/files.js";
+import { isoDate } from "../services/payroll.js";
 import { syncEnrollmentGroupSubjects } from "../services/group-subjects.js";
 import { provisionStudentAccount } from "../services/student-account.js";
 import { generateStudentIdentity } from "../services/student-identity.js";
@@ -15,6 +16,7 @@ type StudentImportRow = {
   lastName: string;
   secondLastName: string;
   curp: string;
+  birthDate: string;
   email: string;
   phone: string;
   programId: number;
@@ -80,7 +82,7 @@ function studentSelect(where = "1 = 1") {
   return `SELECT st.id, st.student_number, st.first_name, st.last_name, st.second_last_name,
     TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS full_name,
     st.curp, st.birth_date, st.email, st.phone, st.emergency_contact, st.address, st.notes,
-    st.is_active, ss.id AS status_id, ss.name AS status_name, ss.color AS status_color,
+    st.is_active, st.near_graduation, ss.id AS status_id, ss.name AS status_name, ss.color AS status_color,
     e.id AS enrollment_id, e.program_id, p.name AS program_name, e.shift_id, sh.name AS shift_name,
     e.group_id, g.name AS group_name, g.study_modality, e.cycle_id, sc.name AS cycle_name,
     e.period_id AS evaluation_period_id, e.curricular_period_id, cp.name AS curricular_period_name,
@@ -133,6 +135,7 @@ studentsRouter.get("/", requirePermission("students.view"), (req, res) => {
       params.push(Number(filterValue));
     }
   });
+  if (req.query.nearGraduation === "true") clauses.push("st.near_graduation = 1");
   if (req.query.active === "true") clauses.push("st.is_active = 1");
   if (req.query.active === "false") clauses.push("st.is_active = 0");
 
@@ -145,7 +148,7 @@ studentsRouter.get("/", requirePermission("students.view"), (req, res) => {
     ...params
   )?.count ?? 0;
   const records = all(
-    `${studentSelect(where)} ORDER BY COALESCE(g.name, ''), COALESCE(sh.name, ''), st.last_name, st.first_name LIMIT ? OFFSET ?`,
+    `${studentSelect(where)} ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), st.id LIMIT ? OFFSET ?`,
     ...params,
     pageSize,
     (page - 1) * pageSize
@@ -545,7 +548,7 @@ studentsRouter.post("/import/preview", requirePermission("students.import"), upl
           )
       : undefined;
     const group = program && shift && cycle
-      ? get<{ id: number }>("SELECT id FROM groups WHERE name = ? AND program_id = ? AND shift_id = ? AND cycle_id = ? AND is_active = 1", groupName, program.id, shift.id, cycle.id)
+      ? get<{ id: number }>("SELECT id FROM groups WHERE name = ? AND program_id = ? AND shift_id = ? AND COALESCE(active_cycle_id,cycle_id) = ? AND is_active = 1", groupName, program.id, shift.id, cycle.id)
       : undefined;
     const curricularPeriod = curricularPeriodName
       ? get<{ id: number; sequence: number }>(
@@ -566,6 +569,8 @@ studentsRouter.post("/import/preview", requirePermission("students.import"), upl
       return;
     }
     const secondLastName = value(source, "Apellido materno", "second_last_name");
+    const birthDate=value(source,"Fecha de nacimiento","birth_date");
+    if(birthDate) { try { isoDate(birthDate,"Fecha de nacimiento"); } catch(error) { errors.push({row:rowNumber,message:error instanceof Error?error.message:"Fecha inválida."});return; } }
     let identity: ReturnType<typeof generateStudentIdentity>;
     try {
       identity = generateStudentIdentity({
@@ -598,6 +603,7 @@ studentsRouter.post("/import/preview", requirePermission("students.import"), upl
       lastName,
       secondLastName,
       curp: value(source, "CURP"),
+      birthDate: value(source, "Fecha de nacimiento", "birth_date"),
       email: identity.email,
       phone: value(source, "Teléfono", "Telefono"),
       programId: program!.id,
@@ -654,17 +660,17 @@ studentsRouter.post("/import/apply", requirePermission("students.import"), (req:
       if (existing) {
         run(
           `UPDATE students SET first_name = ?, last_name = ?, second_last_name = ?, curp = COALESCE(?, curp),
-           phone = ?, status_id = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+           birth_date = COALESCE(?, birth_date), phone = ?, status_id = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
           item.firstName, item.lastName, optionalText(item.secondLastName), optionalText(item.curp),
-          optionalText(item.phone), item.statusId, existing.id
+          optionalText(item.birthDate), optionalText(item.phone), item.statusId, existing.id
         );
         updated++;
       } else {
         const result = run(
-          `INSERT INTO students(student_number, first_name, last_name, second_last_name, curp, email, phone, status_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO students(student_number, first_name, last_name, second_last_name, curp, birth_date, email, phone, status_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           item.studentNumber, item.firstName, item.lastName, optionalText(item.secondLastName), optionalText(item.curp),
-          optionalText(item.email), optionalText(item.phone), item.statusId
+          optionalText(item.birthDate), optionalText(item.email), optionalText(item.phone), item.statusId
         );
         studentId = Number(result.lastInsertRowid);
         created++;
@@ -707,7 +713,7 @@ studentsRouter.post("/import/apply", requirePermission("students.import"), (req:
 });
 
 studentsRouter.get("/export/file", requirePermission("students.export"), (req, res) => {
-  const records = all<any>(`${studentSelect()} ORDER BY st.last_name, st.first_name`);
+  const records = all<any>(`${studentSelect()} ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`);
   const rows = records.map((student) => ({
     Matrícula: student.student_number,
     Alumno: student.full_name,

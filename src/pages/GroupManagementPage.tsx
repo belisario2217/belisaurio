@@ -12,7 +12,7 @@ type Group = {
   program_name: string;
   shift_id: number;
   shift_name: string;
-  study_modality: "escolarizado" | "semiescolarizado" | "complementario";
+  study_modality: "escolarizado" | "semiescolarizado" | "complementario" | "en_linea";
   capacity: number;
   is_active: number;
   formation_cycle_id: number;
@@ -67,7 +67,8 @@ type DetailResponse = { group: Group; students: EnrolledStudent[]; updatedStuden
 const modalityLabels = {
   escolarizado: "Escolarizado",
   semiescolarizado: "Semiescolarizado",
-  complementario: "Complementario"
+  complementario: "Complementario",
+  en_linea: "En Línea"
 };
 
 function normalized(value: unknown) {

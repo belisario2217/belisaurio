@@ -155,3 +155,13 @@ todavía tiene dependencias que deben reasignarse.
 Al activar **Forzar borrado**, el sistema elimina también las dependencias del registro,
 como grupos, inscripciones, asignaciones y calificaciones. La advertencia y el botón cambian
 antes de confirmar para distinguir claramente esta operación irreversible.
+
+## Actualización de vistas, archivos y finanzas
+
+La lista descriptiva y las instrucciones de los módulos nuevos están en [Mejoras IFOP Frontera](MEJORAS-IFOP-FRONTERA.md).
+
+En **Finanzas → Nómina** se configuran docentes con horas semanales y tarifa por hora, y personal administrativo con tarifa diaria. Para cada pago se captura el periodo, semanas o días trabajados y fecha de pago. Primero se revisa el cálculo; al registrarlo se genera un egreso visible en **Finanzas → Balance**.
+
+En **Balance → Nuevo egreso** se registran renta, servicios, materiales y otros conceptos de la escuela. Los ingresos se toman de los cobros registrados; solo los egresos pagados se restan. Los filtros mensuales y los reportes CSV permiten revisar el detalle.
+
+En **Alumnos**, pulsa el nombre para abrir el expediente y consultar su avance. Desde ahí puedes marcar Próximo a egresar. **Reportes** y **Documentos** tienen entradas diferentes en el menú. El **Asistente de archivos** lee hojas, tablas o páginas, propone las columnas y aprende las reglas que confirmes.

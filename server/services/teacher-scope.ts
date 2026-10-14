@@ -9,15 +9,10 @@ export function isTeacherUser(user: AuthUser | undefined) {
 export function teacherIdForUser(user: AuthUser | undefined) {
   if (!isTeacherUser(user)) return null;
   const teacher = get<{ id: number }>(
-    `SELECT id FROM teachers
-     WHERE is_active = 1 AND (email = ? COLLATE NOCASE OR full_name = ? COLLATE NOCASE)
-     ORDER BY CASE WHEN email = ? COLLATE NOCASE THEN 0 ELSE 1 END LIMIT 1`,
-    user!.email,
-    user!.fullName,
-    user!.email
+    "SELECT t.id FROM users u JOIN teachers t ON t.id=u.teacher_id WHERE u.id=? AND t.is_active=1", user!.id
   );
   if (!teacher) {
-    throw new ApiError(403, "Tu usuario docente no está vinculado con el catálogo de docentes. Verifica que ambos tengan el mismo correo.");
+    throw new ApiError(403, "Tu usuario docente no está vinculado con el catálogo de docentes. Pide a administración vincular tu usuario con tu matrícula docente.");
   }
   return teacher.id;
 }

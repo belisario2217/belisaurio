@@ -358,7 +358,7 @@ gradesRouter.get("/assignment/:id/roster", requirePermission("grades.view"), (re
      JOIN subject_assignments a ON a.group_id = e.group_id
      LEFT JOIN grades gr ON gr.enrollment_id = e.id AND gr.assignment_id = a.id
      WHERE a.id = ? AND e.is_active = 1 AND st.is_active = 1
-     ORDER BY st.last_name, st.first_name`,
+     ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     assignmentId
   );
   const components = all<{ enrollment_id: number; assignment_criterion_id: number; score: number }>(
@@ -673,7 +673,7 @@ gradesRouter.get("/export/file", requirePermission("grades.export"), (req: Authe
      JOIN school_cycles sc ON sc.id = e.cycle_id
      JOIN subject_assignments a ON a.id = gr.assignment_id JOIN subjects s ON s.id = a.subject_id
      JOIN teachers t ON t.id = a.teacher_id JOIN academic_periods ap ON ap.id = a.period_id
-     WHERE ${clauses.join(" AND ")} ORDER BY g.name, st.last_name, s.name`,
+     WHERE ${clauses.join(" AND ")} ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), spanish_sort(s.name)`,
     ...params
   );
   const format = String(req.query.format ?? "xlsx");

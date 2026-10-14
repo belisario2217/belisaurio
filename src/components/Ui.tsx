@@ -45,15 +45,19 @@ export function Select({
   placeholder = "Seleccionar",
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & {
-  options: Array<{ id: string | number; name: string }>;
+  options: Array<{ id: string | number; name: string; sequence?: number }>;
   placeholder?: string;
 }) {
   return (
     <select {...props}>
       <option value="">{placeholder}</option>
-      {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+      {[...options].sort((a, b) => a.sequence != null && b.sequence != null ? a.sequence - b.sequence : a.name.localeCompare(b.name, "es-MX", { sensitivity: "base", numeric: true })).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
     </select>
   );
+}
+
+export function LoadingState({ label = "Cargando información" }: { label?: string }) {
+  return <div className="loading-state" role="status" aria-live="polite"><LoaderCircle className="spin" size={24}/><span>{label}</span><div className="loading-skeleton"/></div>;
 }
 
 export function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {

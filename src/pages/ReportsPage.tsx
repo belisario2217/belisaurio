@@ -55,7 +55,7 @@ const studentListFields = [
 ] as const;
 const defaultStudentListFields = ["matricula", "nombre_completo", "programa", "turno", "grupo", "estatus"];
 
-export function ReportsPage() {
+export function ReportsPage({ view = "reports" }: { view?: "reports" | "documents" }) {
   const { can } = useAuth();
   const toast = useToast();
   const [options, setOptions] = useState<Record<string, Option[]>>({});
@@ -327,7 +327,7 @@ export function ReportsPage() {
         <div>
           <h3>{report.title}</h3><p>{report.description}</p>
           {report.type === "attendance" && <div className="attendance-report-options">
-            <label>Modalidad<select value={attendanceMode} onChange={(event) => setAttendanceMode(event.target.value)}><option value="escolarizado">Escolarizado</option><option value="semiescolarizado">Semiescolarizado</option><option value="complementario">Complementario</option></select></label>
+            <label>Modalidad<select value={attendanceMode} onChange={(event) => setAttendanceMode(event.target.value)}><option value="escolarizado">Escolarizado</option><option value="semiescolarizado">Semiescolarizado</option><option value="complementario">Complementario</option><option value="en_linea">En Línea</option></select></label>
             <label>Mes<input type="month" value={attendanceMonth} onChange={(event) => setAttendanceMonth(event.target.value)} /></label>
           </div>}
         </div>
@@ -347,7 +347,7 @@ export function ReportsPage() {
 
   return (
     <div className="page-stack">
-      <section className="report-card-builder">
+      {view === "documents" && <section className="report-card-builder">
         <div className="report-builder-intro">
           <div className="report-builder-icon"><GraduationCap size={28} /></div>
           <div><span>Documento oficial</span><h2>Boletas de calificaciones</h2><p>Generacion individual o masiva con identidad institucional.</p></div>
@@ -358,9 +358,9 @@ export function ReportsPage() {
           <Field label="Periodo"><Select options={options.periods ?? []} value={periodId} onChange={(event) => setPeriodId(event.target.value)} placeholder="Todos los periodos" /></Field>
           <div className="builder-buttons"><Button variant="secondary" icon={<Printer size={17} />} onClick={() => reportCard("student")}>Boleta individual</Button><Button variant="secondary" icon={<FileText size={17} />} onClick={studyCertificate}>Constancia de estudios</Button><Button icon={<Sheet size={17} />} onClick={() => reportCard("group")}>Boletas por grupo</Button></div>
         </div>
-      </section>
+      </section>}
 
-      <section className="curricular-admin">
+      {view === "reports" && <><section className="curricular-admin">
         <div className="section-heading standalone">
           <div><span>Carga académica por grupo</span><h2>Materias asignadas al grupo</h2><p>La materia y el docente se asignan al grupo; cada alumno nuevo recibe automáticamente esta carga.</p></div>
         </div>
@@ -424,6 +424,7 @@ export function ReportsPage() {
         <div className="report-grid">{academicReports.map(renderReportItem)}</div>
       </section>
 
+      </>}
       <Modal open={studentListOpen} onClose={() => setStudentListOpen(false)} title="Personalizar lista de alumnos" size="small">
         <div className="custom-list-intro"><SlidersHorizontal size={20} /><p>Elige hasta 8 campos para generar una lista clara y útil. El grupo seleccionado se conservará como filtro.</p></div>
         <div className="student-list-field-grid">

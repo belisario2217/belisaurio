@@ -11,7 +11,7 @@ const attendanceColumns = 19;
 const campusName = "CAMPUS FRONTERA";
 const institutionCct = "CCT 27MSU0108N";
 
-export type AttendanceMode = "escolarizado" | "semiescolarizado" | "complementario";
+export type AttendanceMode = "escolarizado" | "semiescolarizado" | "complementario" | "en_linea";
 
 type AttendanceSettings = {
   institution_name: string;
@@ -54,7 +54,7 @@ const monthNames = [
 ];
 
 export function normalizeAttendanceMode(value: unknown): AttendanceMode {
-  return value === "semiescolarizado" || value === "complementario" ? value : "escolarizado";
+  return value === "semiescolarizado" || value === "complementario" || value === "en_linea" ? value : "escolarizado";
 }
 
 function normalizedMonth(value: unknown) {
@@ -113,7 +113,7 @@ function studentsForGroup(groupId: number) {
      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name
      FROM enrollments e JOIN students st ON st.id = e.student_id
      WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1
-     ORDER BY st.last_name, st.second_last_name, st.first_name`,
+     ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     groupId
   );
 }

@@ -24,6 +24,7 @@ if (fs.existsSync(restorePath)) {
 
 export const db = new DatabaseSync(databasePath);
 db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
+db.function("spanish_sort", { deterministic: true }, (value) => String(value ?? "").toLowerCase().replace(/ñ/g, "n~").normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 
 export type SqlValue = string | number | bigint | null | Uint8Array;
 export type Row = Record<string, unknown>;
@@ -52,6 +53,19 @@ export function transaction<T>(fn: () => T): T {
   }
 }
 
+function expandStudyModalities() {
+  const table = get<{sql:string}>("SELECT sql FROM sqlite_master WHERE type='table' AND name='groups'")!;
+  const columns = all<{name:string}>("PRAGMA table_info(groups)").map(c => '"'+c.name+'"').join(',');
+  const objects = all<{sql:string}>("SELECT sql FROM sqlite_master WHERE tbl_name='groups' AND type IN ('index','trigger') AND sql IS NOT NULL");
+  const sql = table.sql.replace(/^CREATE TABLE (?:"groups"|groups)/i, 'CREATE TABLE groups_with_online').replace("'semiescolarizado', 'complementario'", "'semiescolarizado', 'complementario', 'en_linea'");
+  if (!sql.includes("'en_linea'")) throw new Error("No se pudo ampliar el catálogo de modalidades.");
+  db.exec(sql);
+  db.exec(`INSERT INTO groups_with_online (${columns}) SELECT ${columns} FROM groups`);
+  db.exec("DROP TABLE groups; ALTER TABLE groups_with_online RENAME TO groups;");
+  for (const item of objects) db.exec(item.sql);
+  if (all("PRAGMA foreign_key_check").length) throw new Error("La migración de modalidades no conservó las referencias académicas.");
+}
+
 export function migrate() {
   const migrationsDir = path.join(here, "migrations");
   const files = fs.readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
@@ -61,10 +75,17 @@ export function migrate() {
     const applied = get("SELECT id FROM schema_migrations WHERE name = ?", file);
     if (applied) continue;
     const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
-    transaction(() => {
-      db.exec(sql);
-      run("INSERT INTO schema_migrations(name) VALUES (?)", file);
-    });
+    const expandModalities = file === "029_online_study_modality.sql";
+    if (expandModalities) db.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      transaction(() => {
+        if (expandModalities) expandStudyModalities();
+        db.exec(sql);
+        run("INSERT INTO schema_migrations(name) VALUES (?)", file);
+      });
+    } finally {
+      if (expandModalities) db.exec("PRAGMA foreign_keys = ON;");
+    }
   }
 }
 
@@ -382,3 +403,14 @@ function ensureEnhancementData() {
 }
 
 ensureEnhancementData();
+
+// Stable identities; existing passwords and role permissions remain intact.
+transaction(() => {
+  run("UPDATE teachers SET teacher_number=printf('DOC%05d',id) WHERE teacher_number IS NULL");
+  const users = all<{id:number;email:string;full_name:string}>("SELECT u.id,u.email,u.full_name FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name='Docente' AND u.teacher_id IS NULL AND u.deleted_at IS NULL ORDER BY u.id");
+  for (const user of users) {
+    let matches=all<{id:number}>("SELECT id FROM teachers WHERE email=? COLLATE NOCASE AND is_active=1",user.email);
+    if (!matches.length) matches=all<{id:number}>("SELECT id FROM teachers WHERE full_name=? COLLATE NOCASE AND is_active=1",user.full_name);
+    if (matches.length===1&&!get("SELECT id FROM users WHERE teacher_id=? AND deleted_at IS NULL",matches[0].id)) run("UPDATE users SET teacher_id=? WHERE id=?",matches[0].id,user.id);
+  }
+});

@@ -60,7 +60,7 @@ export function DashboardPage() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#627d98", fontSize: 12 }} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} tick={{ fill: "#829ab1", fontSize: 11 }} />
                 <Tooltip cursor={{ fill: "#f3f7fa" }} contentStyle={{ border: "1px solid #d9e2ec", borderRadius: 6 }} />
-                <Bar dataKey="average" fill="#277da1" radius={[3, 3, 0, 0]} maxBarSize={44} />
+                <Bar dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} maxBarSize={44} />
               </BarChart>
             </ResponsiveContainer>
           </div>

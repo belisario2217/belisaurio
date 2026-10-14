@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck, ChevronLeft, ChevronRight, Download, FileDown, FileSpreadsheet, FileText, MoreHorizontal,
@@ -11,6 +12,7 @@ import { Button, EmptyState, Field, Select, StatusBadge } from "../components/Ui
 
 type Student = {
   id: number;
+  near_graduation: number;
   student_number: string;
   first_name: string;
   last_name: string;
@@ -38,7 +40,7 @@ type Student = {
   curricular_period_number: number | null;
   plan_id: number | null;
   plan_name: string | null;
-  study_modality: "escolarizado" | "semiescolarizado" | "complementario" | null;
+  study_modality: "escolarizado" | "semiescolarizado" | "complementario" | "en_linea" | null;
   registration_paid: number;
   registration_folio: string | null;
   registration_amount: number | null;
@@ -59,11 +61,11 @@ type Option = {
   curricular_period_id?: number;
   duration_periods?: number;
   sequence?: number;
-  study_modality?: "escolarizado" | "semiescolarizado" | "complementario";
+  study_modality?: "escolarizado" | "semiescolarizado" | "complementario" | "en_linea";
 };
 type PlanOption = { id: number; name: string; program_id: number; program_name: string; matriculation_code: string; is_active: number };
-type Filters = { search: string; programId: string; shiftId: string; groupId: string; cycleId: string; statusId: string };
-const blankFilters: Filters = { search: "", programId: "", shiftId: "", groupId: "", cycleId: "", statusId: "" };
+type Filters = { search: string; programId: string; shiftId: string; groupId: string; cycleId: string; statusId: string; nearGraduation: string };
+const blankFilters: Filters = { search: "", programId: "", shiftId: "", groupId: "", cycleId: "", statusId: "", nearGraduation: "" };
 const blankForm = {
   studentNumber: "", firstName: "", lastName: "", secondLastName: "", curp: "", birthDate: "",
   email: "", phone: "", notes: "", statusId: "", programId: "", shiftId: "", groupId: "", cycleId: "", planId: "", curricularPeriodId: ""
@@ -72,7 +74,8 @@ const blankForm = {
 const modalityLabels = {
   escolarizado: "Escolarizado (ESC)",
   semiescolarizado: "Semiescolarizado (SEM)",
-  complementario: "Complementario (COM)"
+  complementario: "Complementario (COM)",
+  en_linea: "En Línea (LIN)"
 };
 
 function normalizeAcademicLabel(value: unknown) {
@@ -414,9 +417,11 @@ export function StudentsPage() {
           <div className="search-box"><Search size={18} /><input placeholder="Buscar por nombre o matrícula" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></div>
           <Select value={filters.programId} onChange={(event) => selectProgram(event.target.value)} options={options.programs ?? []} placeholder="Todos los programas" aria-label="Programa" />
           <Select value={filters.groupId} onChange={(event) => selectGroup(event.target.value)} options={filterGroups} placeholder="Todos los grupos" aria-label="Grupo" />
+          <select aria-label="Próximos a egresar" value={filters.nearGraduation} onChange={event => setFilters({...filters, nearGraduation:event.target.value})}><option value="">Todos los alumnos</option><option value="true">Próximos a egresar</option></select>
           <Button variant="secondary" onClick={() => { setAppliedFilters(filters); load(1, filters); }}>Filtrar</Button>
         </div>
         <div className="toolbar-actions">
+          {can("students.import") && <Link className="button button-secondary" to="/asistente-importacion">Asistente de archivos</Link>}
           {can("students.import") && <Button variant="secondary" icon={<Upload size={17} />} onClick={() => { setImportOpen(true); setPreview(null); }}>Importar</Button>}
           {can("students.export") && (
             <div className="split-actions">
@@ -441,7 +446,7 @@ export function StudentsPage() {
               <tbody>
                 {records.map((student) => (
                   <tr key={student.id} className={!student.is_active ? "row-muted" : ""}>
-                    <td><div className="person-cell"><div className="mini-avatar">{student.full_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><strong>{student.full_name}</strong><span>{student.curp || "Sin CURP registrada"}</span></div></div></td>
+                    <td><div className="person-cell"><div className="mini-avatar">{student.full_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><strong><Link to={`/alumnos/${student.id}/expediente`}>{student.full_name}</Link></strong>{Boolean(student.near_graduation) && <span className="graduation-badge">Próximo a egresar</span>}<span>{student.curp || "Sin CURP registrada"}</span></div></div></td>
                     <td><code>{student.student_number}</code></td>
                     <td><strong className="table-main">{student.program_name}</strong><span className="table-sub">{student.cycle_name}</span></td>
                     <td><strong className="table-main">{student.shift_name}</strong><span className="table-sub">Grupo {student.group_name}</span></td>
@@ -452,6 +457,7 @@ export function StudentsPage() {
                       <button className="icon-button" onClick={() => setMenuFor(menuFor === student.id ? null : student.id)} aria-label="Acciones"><MoreHorizontal size={19} /></button>
                       {menuFor === student.id && (
                         <div className="row-menu">
+                          <Link to={`/alumnos/${student.id}/expediente`}>Ver expediente y avance</Link>
                           {can("students.manage") && <button onClick={() => openEdit(student)}><Pencil size={16} /> Editar</button>}
                           {can("students.manage") && <button onClick={() => openRegistration(student)}><BadgeCheck size={16} /> Modificar reinscripción</button>}
                           {can("students.manage") && <button onClick={() => toggleFinancialClearance(student)}><BadgeCheck size={16} /> {student.financial_clearance_override ? "Usar cálculo automático" : "Marcar cuenta regularizada"}</button>}

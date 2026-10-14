@@ -480,7 +480,7 @@ paymentsRouter.get("/students", requirePermission("payments.view"), (req, res) =
        LEFT JOIN academic_plans ap ON ap.id = e.plan_id
        WHERE st.is_active = 1 AND (? IS NULL OR e.group_id = ?) AND (? = '' OR st.student_number LIKE ? OR
          TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) LIKE ?)
-       ORDER BY st.last_name, st.first_name LIMIT 20`,
+       ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name) LIMIT 20`,
       groupId,
       groupId,
       search,
@@ -751,7 +751,7 @@ paymentsRouter.get("/tuition-grid", requirePermission("tuition.manage"), (req, r
      JOIN groups g ON g.id = e.group_id
      LEFT JOIN academic_plans ap ON ap.id = e.plan_id
      WHERE st.is_active = 1 AND (? IS NULL OR e.group_id = ?)
-     ORDER BY g.name, st.last_name, st.first_name`,
+     ORDER BY g.name, spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     groupId,
     groupId
   );

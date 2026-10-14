@@ -4,6 +4,11 @@ import { LoaderCircle } from "lucide-react";
 import { useAuth } from "./lib/auth";
 import { Layout } from "./components/Layout";
 
+const ImportAssistantPage = lazy(() => import("./pages/ImportAssistantPage").then(module => ({ default: module.ImportAssistantPage })));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then(module => ({ default: module.WorkspacePage })));
+const StudentDossierPage = lazy(() => import("./pages/StudentDossierPage").then(module => ({ default: module.StudentDossierPage })));
+const PayrollPage = lazy(() => import("./pages/PayrollPage").then(module => ({ default: module.PayrollPage })));
+const BalancePage = lazy(() => import("./pages/BalancePage").then(module => ({ default: module.BalancePage })));
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const StudentsPage = lazy(() => import("./pages/StudentsPage").then((module) => ({ default: module.StudentsPage })));
@@ -25,7 +30,7 @@ const AttendancePage = lazy(() => import("./pages/AttendancePage").then((module)
 function HomePage() {
   const { user, can } = useAuth();
   if (user?.studentId && can("portal.view")) return <Navigate to="/mi-avance" replace />;
-  return <DashboardPage />;
+  return <WorkspacePage />;
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -46,11 +51,17 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/alumnos" element={<StudentsPage />} />
+              <Route path="/alumnos/:id/expediente" element={<StudentDossierPage />} />
+              <Route path="/asistente-importacion" element={<ImportAssistantPage />} />
+              <Route path="/balance" element={<BalancePage />} />
+              <Route path="/nomina" element={<PayrollPage />} />
+              <Route path="/panel" element={<DashboardPage />} />
               <Route path="/grupos" element={<GroupManagementPage />} />
               <Route path="/calificaciones" element={<GradesPage />} />
               <Route path="/asistencia" element={<AttendancePage />} />
               <Route path="/analiticas" element={<AnalyticsPage />} />
               <Route path="/reportes" element={<ReportsPage />} />
+              <Route path="/documentos" element={<ReportsPage view="documents" />} />
               <Route path="/cobros" element={<PaymentsPage />} />
               <Route path="/colegiaturas-mensuales" element={<TuitionGridPage />} />
               <Route path="/mensajes-admin" element={<MessagesAdminPage />} />

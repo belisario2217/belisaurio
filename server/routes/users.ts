@@ -11,7 +11,7 @@ usersRouter.get("/", requirePermission("users.manage"), (req, res) => {
   const search = String(req.query.search ?? "").trim();
   const term = search ? `%${search}%` : null;
   res.json(all(
-    `SELECT u.id, u.full_name, u.email, u.role_id, r.name AS role_name, u.student_id,
+    `SELECT u.id, u.full_name, u.email, u.role_id, r.name AS role_name, u.student_id, u.teacher_id, (SELECT teacher_number FROM teachers WHERE id=u.teacher_id) AS teacher_number,
      st.student_number, TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name,
      u.is_active, u.password_must_change, u.last_login_at, u.created_at
      FROM users u JOIN roles r ON r.id = u.role_id
@@ -32,7 +32,7 @@ usersRouter.get("/student-options", requirePermission("users.manage"), (_req, re
      FROM students st
      WHERE st.is_active = 1
      AND NOT EXISTS (SELECT 1 FROM users u WHERE u.student_id = st.id)
-     ORDER BY st.last_name, st.first_name`
+     ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`
   ));
 });
 
@@ -48,13 +48,16 @@ usersRouter.post("/", requirePermission("users.manage"), async (req: Authenticat
   if (studentId && get("SELECT id FROM users WHERE student_id = ?", studentId)) {
     throw new ApiError(409, "El alumno seleccionado ya tiene una cuenta vinculada.");
   }
+  const matchingTeachers = role.name === "Docente" ? all<{id:number}>("SELECT id FROM teachers WHERE email=? COLLATE NOCASE AND is_active=1 AND NOT EXISTS(SELECT 1 FROM users WHERE teacher_id=teachers.id AND deleted_at IS NULL)", email) : [];
+  const teacherId = matchingTeachers.length === 1 ? matchingTeachers[0].id : null;
   const result = run(
-    "INSERT INTO users(full_name, email, password_hash, role_id, student_id) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO users(full_name, email, password_hash, role_id, student_id, teacher_id) VALUES (?, ?, ?, ?, ?, ?)",
     fullName,
     email,
     await bcrypt.hash(password, 12),
     roleId,
-    studentId
+    studentId,
+    teacherId
   );
   logActivity(req, "create", "users", Number(result.lastInsertRowid), { email });
   res.status(201).json({ id: Number(result.lastInsertRowid), fullName, email });
@@ -88,7 +91,7 @@ usersRouter.patch("/:id", requirePermission("users.manage"), async (req: Authent
      password_hash = COALESCE(?, password_hash),
      password_must_change = CASE WHEN ? IS NULL THEN password_must_change ELSE 0 END,
      temporary_password_name = CASE WHEN ? IS NULL THEN temporary_password_name ELSE NULL END,
-     student_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+     teacher_id = CASE WHEN ? = 'Docente' THEN teacher_id ELSE NULL END, student_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
     linkedName ?? (req.body.fullName ? cleanText(req.body.fullName, 180) : null),
     linkedEmail ?? (req.body.email ? cleanText(req.body.email, 180).toLowerCase() : null),
     roleId,
@@ -96,6 +99,7 @@ usersRouter.patch("/:id", requirePermission("users.manage"), async (req: Authent
     passwordHash,
     passwordHash,
     passwordHash,
+    role.name,
     studentId,
     id
   );
@@ -115,7 +119,7 @@ usersRouter.delete("/:id", requirePermission("users.manage"), (req: Authenticate
     student_id: number | null;
     is_active: number;
   }>(
-    `SELECT u.id, u.full_name, u.email, r.name AS role_name, u.student_id, u.is_active
+    `SELECT u.id, u.full_name, u.email, r.name AS role_name, u.student_id, u.teacher_id, (SELECT teacher_number FROM teachers WHERE id=u.teacher_id) AS teacher_number, u.is_active
      FROM users u JOIN roles r ON r.id = u.role_id
      WHERE u.id = ? AND u.deleted_at IS NULL`,
     id

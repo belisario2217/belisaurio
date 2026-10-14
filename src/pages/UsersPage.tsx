@@ -6,7 +6,7 @@ import { useToast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import { Button, Field, Select, StatusBadge } from "../components/Ui";
 
-type User = { id: number; full_name: string; email: string; role_id: number; role_name: string; student_id: number | null; student_name: string | null; student_number: string | null; is_active: number; password_must_change: number; last_login_at: string | null };
+type User = { id: number; full_name: string; email: string; role_id: number; role_name: string; teacher_id: number | null; teacher_number: string | null; student_id: number | null; student_name: string | null; student_number: string | null; is_active: number; password_must_change: number; last_login_at: string | null };
 type Role = { id: number; name: string; description: string; permission_count: number; is_active: number };
 type StudentCredentials = {
   studentNumber: string;
@@ -19,6 +19,11 @@ type StudentCredentials = {
 export function UsersPage() {
   const { can, user: sessionUser } = useAuth();
   const toast = useToast();
+  const [linkTeacher, setLinkTeacher] = useState<User | null>(null);
+  const [teacherOptions, setTeacherOptions] = useState<Array<{id:number;name:string}>>([]);
+  const [teacherId, setTeacherId] = useState("");
+  async function openTeacherLink(account: User) { setLinkTeacher(account); setTeacherId(String(account.teacher_id ?? "")); try { setTeacherOptions(await api<Array<{id:number;name:string}>>("/improvements/teacher-options")); } catch(error) { toast.error(error instanceof Error ? error.message : "No fue posible consultar docentes."); } }
+  async function saveTeacherLink() { if (!linkTeacher) return; setBusy(true); try { await api(`/improvements/users/${linkTeacher.id}/teacher`, {method:"PATCH",body:{teacherId}}); toast.success("Cuenta vinculada a su matrícula docente."); setLinkTeacher(null); await load(); } catch(error) { toast.error(error instanceof Error ? error.message : "No fue posible vincular."); } finally { setBusy(false); } }
   const [tab, setTab] = useState<"users" | "roles">("users");
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -179,8 +184,8 @@ export function UsersPage() {
       {tab === "users" ? (
         <section className="table-section">
           <header className="section-heading"><div><span>Acceso</span><h2>Cuentas del sistema</h2></div><div className="section-heading-tools"><label className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar usuario, correo o rol" /></label><Button icon={<Plus size={18} />} onClick={createUser}>Nuevo usuario</Button></div></header>
-          <div className="table-wrap"><table><thead><tr><th>Usuario</th><th>Rol</th><th>Alumno vinculado</th><th>Último acceso</th><th>Estado</th><th aria-label="Acciones" /></tr></thead><tbody>
-            {users.map((user) => <tr key={user.id}><td><div className="person-cell"><div className="mini-avatar">{user.full_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><strong>{user.full_name}</strong><span>{user.email}</span></div></div></td><td><span className="role-chip">{user.role_name}</span></td><td>{user.student_name ? <><strong className="table-main">{user.student_name}</strong><span className="table-sub">{user.student_number}{user.password_must_change ? " · Contraseña temporal" : " · Contraseña personalizada"}</span></> : <span className="muted-cell">No aplica</span>}</td><td>{user.last_login_at ? new Date(user.last_login_at).toLocaleString("es-MX") : "Sin acceso"}</td><td><StatusBadge active={Boolean(user.is_active)} /></td><td><div className="split-actions">{user.student_id && <button title="Ver credenciales del alumno" onClick={() => openStudentCredentials(user)}><Eye size={17} /></button>}{user.student_id && <button title="Restablecer contraseña del alumno" onClick={() => { setResetting(user); setResetResult(null); }}><KeyRound size={17} /></button>}<button title="Editar usuario" onClick={() => editUser(user)}><Pencil size={17} /></button>{user.id !== sessionUser?.id && <button title="Eliminar cuenta de acceso" onClick={() => setDeleting(user)}><Trash2 size={17} /></button>}</div></td></tr>)}
+          <div className="table-wrap"><table><thead><tr><th>Usuario</th><th>Rol</th><th>Alumno / docente vinculado</th><th>Último acceso</th><th>Estado</th><th aria-label="Acciones" /></tr></thead><tbody>
+            {users.map((user) => <tr key={user.id}><td><div className="person-cell"><div className="mini-avatar">{user.full_name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</div><div><strong>{user.full_name}</strong><span>{user.email}</span></div></div></td><td><span className="role-chip">{user.role_name}</span></td><td>{user.student_name ? <><strong className="table-main">{user.student_name}</strong><span className="table-sub">{user.student_number}{user.password_must_change ? " · Contraseña temporal" : " · Contraseña personalizada"}</span></> : user.teacher_number ? <strong>{user.teacher_number}</strong> : <span className="muted-cell">{user.role_name === "Docente" ? "Pendiente de vincular" : "No aplica"}</span>}</td><td>{user.last_login_at ? new Date(user.last_login_at).toLocaleString("es-MX") : "Sin acceso"}</td><td><StatusBadge active={Boolean(user.is_active)} /></td><td><div className="split-actions">{user.role_name === "Docente" && <button title="Vincular matrícula docente" onClick={() => void openTeacherLink(user)}><UserCog size={17}/></button>}{user.student_id && <button title="Ver credenciales del alumno" onClick={() => openStudentCredentials(user)}><Eye size={17} /></button>}{user.student_id && <button title="Restablecer contraseña del alumno" onClick={() => { setResetting(user); setResetResult(null); }}><KeyRound size={17} /></button>}<button title="Editar usuario" onClick={() => editUser(user)}><Pencil size={17} /></button>{user.id !== sessionUser?.id && <button title="Eliminar cuenta de acceso" onClick={() => setDeleting(user)}><Trash2 size={17} /></button>}</div></td></tr>)}
           </tbody></table></div>
         </section>
       ) : (
@@ -197,6 +202,7 @@ export function UsersPage() {
         </section>
       )}
 
+      <Modal open={Boolean(linkTeacher)} onClose={() => setLinkTeacher(null)} title="Vincular usuario docente"><div className="page-stack"><p>{linkTeacher?.full_name}: selecciona su ficha docente. La vinculación se mantiene aunque cambie el correo o el nombre.</p><Field label="Docente"><Select options={teacherOptions} value={teacherId} onChange={event => setTeacherId(event.target.value)} placeholder="Sin docente vinculado"/></Field><Button busy={busy} onClick={() => void saveTeacherLink()}>Guardar vinculación</Button></div></Modal>
       <Modal open={userOpen} onClose={() => setUserOpen(false)} title={editing ? "Editar usuario" : "Nuevo usuario"}>
         <form onSubmit={saveUser}><div className="form-grid two">
           <Field label="Nombre completo" required hint={editing?.student_id ? "Vinculado automáticamente al expediente." : undefined}><input value={userForm.fullName} onChange={(event) => setUserForm({ ...userForm, fullName: event.target.value })} readOnly={Boolean(editing?.student_id)} required /></Field>

@@ -71,7 +71,7 @@ export function AnalyticsPage() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} />
                 <Tooltip />
-                <Bar dataKey="average" fill="#277da1" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -85,7 +85,7 @@ export function AnalyticsPage() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} />
                 <Tooltip />
-                <Line dataKey="average" stroke="#f97360" strokeWidth={3} dot={{ fill: "#f97360", r: 4 }} />
+                <Line dataKey="average" stroke="#087b88" strokeWidth={3} dot={{ fill: "#087b88", r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -100,7 +100,7 @@ export function AnalyticsPage() {
                 <YAxis type="category" dataKey="name" width={110} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Bar dataKey="failure_rate" radius={[0, 3, 3, 0]}>
-                  {(data?.subjectAverages ?? []).map((entry) => <Cell key={entry.id} fill={entry.failure_rate >= 30 ? "#d95d50" : "#e0a62f"} />)}
+                  {(data?.subjectAverages ?? []).map((entry) => <Cell key={entry.id} fill={entry.failure_rate >= 30 ? "#c2384b" : "#e0a62f"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

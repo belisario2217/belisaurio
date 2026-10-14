@@ -58,7 +58,7 @@ function studentListRows(groupId?: number, fields = defaultStudentListFields) {
      LEFT JOIN school_cycles sc ON sc.id = e.cycle_id
      LEFT JOIN academic_periods ap ON ap.id = e.period_id
      WHERE (? IS NULL OR e.group_id = ?)
-     ORDER BY COALESCE(g.name, ''), st.last_name, st.first_name, st.second_last_name`,
+     ORDER BY COALESCE(g.name, ''), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     groupId ?? null, groupId ?? null
   );
 }
@@ -432,7 +432,7 @@ reportsRouter.get("/report-card.pdf", requirePermission("reports.generate"), (re
     ? [studentId]
     : all<{ id: number }>(
       `SELECT st.id FROM students st JOIN enrollments e ON e.student_id = st.id
-       WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1 ORDER BY st.last_name, st.first_name`,
+       WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1 ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
       groupId!
     ).map((student) => student.id);
   if (!studentIds.length) throw new ApiError(404, "El grupo no tiene alumnos activos.");
@@ -496,7 +496,7 @@ reportsRouter.get("/curricular-subjects", requirePermission("reports.view"), (re
      )
      LEFT JOIN teachers t ON t.id = a.teacher_id
      WHERE ${clauses.join(" AND ")}
-     ORDER BY ss.semester_number, st.last_name, st.first_name, s.name`,
+     ORDER BY ss.semester_number, spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), s.name`,
     ...params
   ));
 });
@@ -755,7 +755,7 @@ const reportDefinitions = {
       FROM students st JOIN student_statuses ss ON ss.id = st.status_id
       JOIN enrollments e ON e.student_id = st.id AND e.is_active = 1 JOIN groups g ON g.id = e.group_id
       JOIN programs p ON p.id = e.program_id JOIN shifts sh ON sh.id = e.shift_id
-      WHERE (? IS NULL OR e.group_id = ?) ORDER BY g.name, st.last_name`,
+      WHERE (? IS NULL OR e.group_id = ?) ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     headers: ["Matricula", "Alumno", "Grupo", "Programa", "Turno", "Estatus"]
   },
   attendance: {
@@ -765,7 +765,7 @@ const reportDefinitions = {
       g.name AS Grupo, '' AS Asistencia, '' AS Observaciones
       FROM students st JOIN enrollments e ON e.student_id = st.id AND e.is_active = 1
       JOIN groups g ON g.id = e.group_id WHERE (? IS NULL OR e.group_id = ?)
-      ORDER BY g.name, st.last_name`,
+      ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     headers: ["Matricula", "Alumno", "Grupo", "Asistencia", "Observaciones"]
   },
   gradebook: {
@@ -776,7 +776,7 @@ const reportDefinitions = {
       FROM grades gr JOIN enrollments e ON e.id = gr.enrollment_id JOIN students st ON st.id = e.student_id
       JOIN groups g ON g.id = e.group_id JOIN subject_assignments a ON a.id = gr.assignment_id
       JOIN subjects s ON s.id = a.subject_id JOIN academic_periods ap ON ap.id = a.period_id
-      WHERE (? IS NULL OR e.group_id = ?) ORDER BY g.name, st.last_name, s.name`,
+      WHERE (? IS NULL OR e.group_id = ?) ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), spanish_sort(s.name)`,
     headers: ["Matricula", "Alumno", "Grupo", "Materia", "Periodo", "Calificacion"]
   },
   subjects: {
@@ -808,7 +808,7 @@ const reportDefinitions = {
       JOIN groups g ON g.id = e.group_id JOIN subject_assignments a ON a.id = gr.assignment_id
       JOIN subjects s ON s.id = a.subject_id JOIN grading_scales gs ON gs.id = a.grading_scale_id
       WHERE gr.final_score < gs.passing_score AND (? IS NULL OR e.group_id = ?)
-      ORDER BY g.name, st.last_name, s.name`,
+      ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), spanish_sort(s.name)`,
     headers: ["Matricula", "Alumno", "Grupo", "Materia", "Calificacion"]
   },
   outstanding: {
