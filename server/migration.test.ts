@@ -20,6 +20,7 @@ INSERT INTO student_statuses(id,name) VALUES(100,'Activo');
 INSERT INTO students(id,student_number,first_name,last_name,status_id) VALUES(100,'LEGACY-100','Nombre','Apellido',100);
 INSERT INTO groups(id,name,program_id,shift_id,cycle_id,active_cycle_id,curricular_period_id) VALUES(100,'Grupo de prueba',100,100,100,100,100);
 INSERT INTO enrollments(id,student_id,program_id,shift_id,group_id,cycle_id) VALUES(100,100,100,100,100,100);`);
+legacy.exec("UPDATE sqlite_sequence SET seq=150 WHERE name='groups'");
 legacy.close();process.env.DATABASE_PATH=filename;
 const {db,get,all,run,migrate}=await import('./db.js');
 afterAll(()=>{db.close();fs.rmSync(root,{recursive:true,force:true});});
@@ -28,6 +29,7 @@ it('upgrades existing single-campus academic data with all foreign keys and pass
  expect(get<{study_modality:string}>('SELECT study_modality FROM groups WHERE id=100')!.study_modality).toBe('escolarizado');
  run("UPDATE groups SET study_modality='en_linea' WHERE id=100");
  expect(all('PRAGMA foreign_key_check')).toHaveLength(0);
+ expect(get<{seq:number}>("SELECT seq FROM sqlite_sequence WHERE name='groups'")!.seq).toBe(150);
  expect(get<{password_hash:string;teacher_id:number}>('SELECT password_hash,teacher_id FROM users WHERE id=100')).toMatchObject({password_hash:'test-hash',teacher_id:100});
  expect(get<{teacher_number:string}>('SELECT teacher_number FROM teachers WHERE id=100')!.teacher_number).toBe('DOC00100');
  const before=all('SELECT name FROM schema_migrations').length;migrate();expect(all('SELECT name FROM schema_migrations')).toHaveLength(before);

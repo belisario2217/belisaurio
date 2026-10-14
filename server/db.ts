@@ -55,6 +55,7 @@ export function transaction<T>(fn: () => T): T {
 
 function expandStudyModalities() {
   const table = get<{sql:string}>("SELECT sql FROM sqlite_master WHERE type='table' AND name='groups'")!;
+  const previousSequence = get<{seq:number}>("SELECT seq FROM sqlite_sequence WHERE name='groups'")?.seq ?? 0;
   const columns = all<{name:string}>("PRAGMA table_info(groups)").map(c => '"'+c.name+'"').join(',');
   const objects = all<{sql:string}>("SELECT sql FROM sqlite_master WHERE tbl_name='groups' AND type IN ('index','trigger') AND sql IS NOT NULL");
   const sql = table.sql.replace(/^CREATE TABLE (?:"groups"|groups)/i, 'CREATE TABLE groups_with_online').replace("'semiescolarizado', 'complementario'", "'semiescolarizado', 'complementario', 'en_linea'");
@@ -62,6 +63,7 @@ function expandStudyModalities() {
   db.exec(sql);
   db.exec(`INSERT INTO groups_with_online (${columns}) SELECT ${columns} FROM groups`);
   db.exec("DROP TABLE groups; ALTER TABLE groups_with_online RENAME TO groups;");
+  run("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='groups'", previousSequence);
   for (const item of objects) db.exec(item.sql);
   if (all("PRAGMA foreign_key_check").length) throw new Error("La migración de modalidades no conservó las referencias académicas.");
 }
