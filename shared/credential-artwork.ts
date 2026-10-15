@@ -52,8 +52,13 @@ export function credentialSvg(snapshot: CredentialSnapshot, side: "front" | "bac
   }
   parts.push(`<circle cx="622" cy="90" r="65" fill="#FFFFFF"/>`);
   // An 84 × 84 square, including its corners, fits inside the circular seal with padding.
-  if (assets.logo) image(assets.logo, 580, 48, 84, 84);
-  else text(t.institution, 580, 48, 84, 84, 23, primary, true);
+  if (assets.logo) {
+    // Hide the source image's outer black rule in the credential without altering the logo file.
+    const logoSize = 84, sourceInset = .025, imageSize = logoSize / (1 - 2 * sourceInset);
+    const offset = (imageSize - logoSize) / 2, clipId = `credential-logo-${side}`;
+    parts.push(`<defs><clipPath id="${clipId}"><rect x="580" y="48" width="${logoSize}" height="${logoSize}"/></clipPath></defs>`);
+    image(assets.logo, 580 - offset, 48 - offset, imageSize, imageSize, `clip-path="url(#${clipId})"`);
+  } else text(t.institution, 580, 48, 84, 84, 23, primary, true);
   if (side === "front") {
     text(`ESTUDIANTE · ${t.campus.toLocaleUpperCase("es-MX")}`, 300, 183, 645, 35, 21, light, true);
     for (const [ring, radius] of [[0, 243], [1, 275]] as const) for (let i = 0; i < 42; i++) {
