@@ -19,6 +19,48 @@ Cambiar la fotografía o guardar un nuevo encuadre desactiva la emisión anterio
 necesario volver a activar la credencial. **Desactivar credencial** retira inmediatamente
 la descarga y la validez del QR, incluso si existe una copia previamente descargada.
 
+## Fotografía enviada desde el portal del alumno
+
+En **Mi credencial**, el alumno puede abrir **Tomar o cargar mi fotografía** y
+elegir su galería o la cámara frontal. La guía ilustrada muestra el fondo totalmente
+blanco y uniforme, el uniforme escolar, la cámara a la altura de los ojos y el rostro
+centrado. La cámara en vivo presenta un óvalo y referencias para ojos y centro;
+la guía se excluye de la captura. Si el navegador no ofrece cámara, niega el permiso
+o no responde, está disponible **Abrir cámara del dispositivo** y la galería.
+Al cerrar o abandonar la captura se detienen las pistas de cámara, incluso si el
+permiso se concede después de haber cancelado. El micrófono no se solicita.
+
+El alumno confirma los requisitos y ajusta el mismo encuadre circular utilizado
+por la credencial y el PDF. Se aceptan imágenes de 320 × 320 píxeles como mínimo,
+hasta 10 MB y 40 megapíxeles; se recomienda más resolución. Las fotos HEIC/HEIF
+se convierten a JPEG a resolución completa cuando el navegador puede abrirlas;
+si no, se indica usar JPG o la cámara. Se respeta la orientación.
+
+El aclarado opcional actúa únicamente sobre tonos claros y neutros conectados al
+borde de la imagen y protege el área central destinada al rostro. No sustituye un fondo de color ni comprueba automáticamente
+el uniforme. Se conserva el archivo enviado y se preparan versiones sin metadatos
+de ubicación a resolución original para comparar. Administración comprueba el
+resultado y puede elegir la versión sin aclarado o la preparada.
+
+Los envíos aparecen en **Credenciales → Fotos por revisar**. Antes de
+**Aprobar foto y publicar credencial**, el administrativo comprueba la imagen,
+ajusta el encuadre y confirma los requisitos. La creación de PDF se completa antes
+de sustituir la credencial publicada; foto, encuadre, emisión y revisión se guardan
+en una sola transacción. El alumno y el sistema descargan exactamente la misma
+versión aprobada. La vigencia sigue limitada por el ciclo activo y seis meses.
+
+**Solicitar otra fotografía** requiere un motivo que aparece al alumno. Reenviar
+una foto reemplaza el envío pendiente y exige otra revisión. Subir o rechazar una
+propuesta conserva la credencial publicada, su QR y sus descargas. Solo la
+aprobación y publicación de la nueva versión sustituyen la emisión anterior.
+No se pueden aprobar envíos rechazados, reemplazados o ya revisados; las
+actualizaciones simultáneas y los cambios durante la generación de PDF se detectan.
+
+La migración `034_credential_photo_submissions.sql` añade la revisión y su historial.
+Los originales y las propuestas permanecen en el almacén privado de credenciales;
+el alumno solo accede a sus propios envíos y únicamente el personal con
+`credentials.manage` puede revisar, aprobar o rechazar.
+
 ## Ciclo y vigencia
 
 La vigencia se calcula automáticamente: termina en la primera de estas dos fechas,

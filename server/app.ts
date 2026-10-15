@@ -39,7 +39,9 @@ export const app = express();
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: { directives: { imgSrc: ["'self'","data:","blob:"], mediaSrc: ["'self'","blob:"] } }
+}));
 app.use(cors({ origin: process.env.APP_ORIGIN ?? "http://localhost:4173" }));
 app.use(express.json({ limit: "1mb" }));
 app.use("/assets", express.static(path.join(root, "public", "assets")));
