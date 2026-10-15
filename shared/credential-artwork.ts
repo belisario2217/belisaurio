@@ -51,8 +51,9 @@ export function credentialSvg(snapshot: CredentialSnapshot, side: "front" | "bac
     parts.push(`<text transform="translate(72 285) rotate(-90)" font-family="Helvetica" font-weight="bold" font-size="${titleSize}" fill="${primary}">${escapeXml(t.title)}</text>`);
   }
   parts.push(`<circle cx="622" cy="90" r="65" fill="#FFFFFF"/>`);
-  if (assets.logo) image(assets.logo, 568, 36, 108, 108);
-  else text(t.institution, 562, 47, 120, 85, 23, primary, true);
+  // An 84 × 84 square, including its corners, fits inside the circular seal with padding.
+  if (assets.logo) image(assets.logo, 580, 48, 84, 84);
+  else text(t.institution, 580, 48, 84, 84, 23, primary, true);
   if (side === "front") {
     text(`ESTUDIANTE · ${t.campus.toLocaleUpperCase("es-MX")}`, 300, 183, 645, 35, 21, light, true);
     for (const [ring, radius] of [[0, 243], [1, 275]] as const) for (let i = 0; i < 42; i++) {
