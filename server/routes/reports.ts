@@ -166,11 +166,8 @@ function syncCurricularGrade(userId: number, enrollmentId: number, assignmentId:
   );
   if (current) {
     run(
-      `UPDATE grades SET final_score = ?, partial_1 = ?, partial_2 = ?, partial_3 = ?,
+      `UPDATE grades SET final_score = ?,
        status = ?, comments = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      score,
-      score,
-      score,
       score,
       status,
       comments,
@@ -188,14 +185,11 @@ function syncCurricularGrade(userId: number, enrollmentId: number, assignmentId:
     return current.id;
   }
   const inserted = run(
-    `INSERT INTO grades(enrollment_id, assignment_id, final_score, partial_1, partial_2, partial_3,
+    `INSERT INTO grades(enrollment_id, assignment_id, final_score,
      status, comments, created_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     enrollmentId,
     assignmentId,
-    score,
-    score,
-    score,
     score,
     status,
     comments,

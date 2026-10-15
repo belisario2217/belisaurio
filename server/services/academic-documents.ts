@@ -81,7 +81,9 @@ export function drawDocumentValidation(doc: PDFKit.PDFDocument, issued: IssuedDo
 
 export function drawAcademicDocument(doc: PDFKit.PDFDocument, data: AcademicRecord, issued: IssuedDocument) {
   const history = issued.snapshot.type === "academic_history";
+  const studentCopy = issued.snapshot.content.purpose === "student_copy";
   const subtitle = history ? `Avance acumulado hasta el semestre ${data.student.curricular_period_number}. No incluye asignaturas de semestres posteriores.`
+    : studentCopy ? "Documento informativo. No tiene valor para trámites."
     : "Resultados exclusivos del semestre actual. Documento para firma y sello de Control Escolar.";
   const heading = () => {
     drawAcademicHeader(doc, data.student, issued.snapshot.title, subtitle);
@@ -138,6 +140,15 @@ export function drawAcademicDocument(doc: PDFKit.PDFDocument, data: AcademicReco
   doc.y += 18;
   doc.font("Helvetica-Bold").fontSize(12).fillColor(primary).text(`${history ? "Promedio acumulado" : "Promedio del semestre"}: ${data.average == null ? "Pendiente" : data.average.toFixed(1)}`, left, doc.y, { width, align: "right" });
   doc.moveDown(.45).font("Helvetica").fontSize(8).fillColor("#607086").text("El promedio considera únicamente calificaciones finales registradas. Los parciales incompletos no constituyen una calificación final.", left, doc.y, { width });
-  drawDocumentValidation(doc, issued, !history);
+  if (studentCopy) {
+    ensureDocumentSpace(doc, 112);
+    const y = doc.y + 12;
+    doc.image(issued.qrPng, left, y, { width: 82, height: 82 });
+    doc.link(left, y, 82, 82, issued.verificationUrl);
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(primary).text("VALIDACIÓN DE LA BOLETA DEL ALUMNO", left + 98, y + 5, { width: width - 98 });
+    doc.font("Helvetica").fontSize(8).fillColor("#24364A")
+      .text(`Folio: ${issued.folio}\nEmisión: ${issuedDisplayDate(issued.issuedAt)}\nEscanea el QR para cotejar las materias y calificaciones registradas al emitir esta boleta.`, { width: width - 98, lineGap: 3 });
+    doc.font("Helvetica-Bold").fontSize(8).text("No tiene valor para trámites.", { width: width - 98 });
+  } else drawDocumentValidation(doc, issued, !history);
   doc.removeListener("pageAdded", heading);
 }

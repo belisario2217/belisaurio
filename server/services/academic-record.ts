@@ -69,17 +69,19 @@ type PlanSubject = {
 };
 
 function subjectResult(base: PlanSubject, grades: GradeRow[], explicit?: ExplicitSubject): AcademicSubject {
-  const partial = grades.filter(row => row.evaluation_mode === "partials").at(-1);
+  const partial = grades.filter(row => row.evaluation_mode === "partials"
+    && (row.partial_1 != null || row.partial_2 != null || row.partial_3 != null)).at(-1);
   const partials = [1, 2, 3].map(n => partial
     ? partial[`partial_${n}` as "partial_1" | "partial_2" | "partial_3"]
     : grades.filter(row => row.period_sequence === n).at(-1)?.final_score ?? null);
   const scores = grades.map(row => row.final_score).filter((score): score is number => score != null);
   const incomplete = !!partial && partials.some(score => score == null);
-  const score = explicit?.final_score ?? (incomplete ? null : partial?.final_score ?? (scores.length
+  const score = incomplete ? null : explicit?.final_score ?? (partial?.final_score ?? (scores.length
     ? Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1)) : null));
   const passing = grades.at(-1)?.passing_score
     ?? get<{passing_score: number}>("SELECT passing_score FROM grading_scales WHERE id = (SELECT default_scale_id FROM institution_settings WHERE id = 1)")?.passing_score;
   const status = score != null && passing != null ? (score >= passing ? "passed" : "failed")
+    : incomplete ? "in_progress"
     : explicit?.status === "completed" ? "completed"
     : incomplete || explicit?.status === "in_progress" ? "in_progress" : "pending";
   return {

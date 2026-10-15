@@ -21,6 +21,7 @@ export type OfficialDocumentSnapshot = {
     semester: number | null; semesterName: string; cycle: string;
   };
   content: {
+    purpose?: "student_copy";
     certification?: PlanCertification;
     subjects?: PrintedSubject[];
     average?: number | null;
