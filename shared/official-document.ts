@@ -1,3 +1,5 @@
+import type { PlanCertification } from "./plan-certification.js";
+
 export type OfficialDocumentType = "report_card" | "academic_history" | "study_certificate" | "account_statement";
 
 export type PrintedSubject = {
@@ -19,6 +21,7 @@ export type OfficialDocumentSnapshot = {
     semester: number | null; semesterName: string; cycle: string;
   };
   content: {
+    certification?: PlanCertification;
     subjects?: PrintedSubject[];
     average?: number | null;
     calendar?: { start: string; end: string; vacations: { start_date: string; end_date: string }[] };

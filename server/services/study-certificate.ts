@@ -6,6 +6,8 @@ import { createPdf } from "./files.js";
 import { documentBranding } from "./document-branding.js";
 import { issueDocument, type IssuedDocument } from "./document-verification.js";
 import { drawDocumentValidation, ensureDocumentSpace, printedSubjects, publicAcademicStudent } from "./academic-documents.js";
+import { ApiError } from "../utils.js";
+import { inferCertificateAuthority, planCertification, type PlanCertification } from "../../shared/plan-certification.js";
 
 type CertificateSettings = {
   institution_name: string; director_name: string | null;
@@ -113,8 +115,15 @@ export function repairAcademicAccents(value: string) {
 
 export function getStudyCertificateData(studentId: number) {
   const record = getAcademicRecord(studentId, "report_card");
+  if (!record.student.assigned_plan_id) {
+    const choices = get<{count:number}>("SELECT COUNT(DISTINCT certificate_authority) AS count FROM academic_plans WHERE program_id=? AND is_active=1", record.student.program_id)!.count;
+    if (choices > 1) throw new ApiError(409, "Asigna el plan IFOP o UNITEN al alumno o a su grupo antes de emitir la constancia; este programa tiene planes de ambas instituciones.");
+  }
   const settings = get<CertificateSettings>("SELECT institution_name, director_name FROM institution_settings WHERE id = 1")!;
-  return { settings, student: record.student, calendar: getCycleCalendar(record.student.cycle_id), currentSubjects: record.subjects };
+  const authority = record.student.certificate_authority || inferCertificateAuthority("", "", record.student.program_name);
+  const { institution, cct, collaborationAgreement } = planCertification[authority];
+  const certification: PlanCertification = { authority, institution, cct, collaborationAgreement, rvoe: record.student.rvoe?.trim() || null };
+  return { settings, student: record.student, certification, calendar: getCycleCalendar(record.student.cycle_id), currentSubjects: record.subjects };
 }
 
 export function certificateStudentTerm(curp: string | null) {
@@ -145,7 +154,12 @@ export function drawStudyCertificate(doc: PDFKit.PDFDocument, data: StudyCertifi
   const registered = term === "el alumno" ? "inscrito" : term === "la alumna" ? "inscrita" : "con inscripción activa";
   const startTime = displayTime(data.student.shift_start_time), endTime = displayTime(data.student.shift_end_time);
   const schedule = startTime && endTime ? `, de ${startTime} a ${endTime}` : "";
-  const paragraph = `Se encuentra actualmente ${registered} en esta institución, en el ${period} del programa ${certificateProgramName(data.student.program_name)}, en la modalidad ${modalityLabel(data.student.modality)}, con RVOE ${data.student.rvoe?.trim() || "NO REGISTRADO"}, matrícula ${data.student.student_number} y grupo ${data.student.group_name}, en convenio educativo con la institución denominada “Centro Universitario Tecnológico de Enfermería” (UNITEN), CCT 18PSU0074C. Su horario corresponde a ${attendanceDays(data.student.modality)}${schedule}.`;
+  const recognition = data.certification.authority === "ifop"
+    ? `con RVOE propio ${data.certification.rvoe || "NO REGISTRADO"}, CCT ${data.certification.cct}`
+    : `con RVOE ${data.certification.rvoe || "NO REGISTRADO"}`;
+  const agreement = data.certification.collaborationAgreement
+    ? `, en convenio de colaboración con la institución denominada “Centro Universitario Tecnológico de Enfermería” (UNITEN), CCT ${data.certification.cct}` : "";
+  const paragraph = `Se encuentra actualmente ${registered} en esta institución, en el ${period} del programa ${certificateProgramName(data.student.program_name)}, en la modalidad ${modalityLabel(data.student.modality)}, ${recognition}, matrícula ${data.student.student_number} y grupo ${data.student.group_name}${agreement}. Su horario corresponde a ${attendanceDays(data.student.modality)}${schedule}.`;
   doc.font("Helvetica").fontSize(9.5).fillColor("#24364A").text(paragraph, left, doc.y, { width, align: "justify", lineGap: 2 });
   doc.moveDown(.75);
   const calendarLines = [
@@ -191,7 +205,8 @@ export function drawStudyCertificate(doc: PDFKit.PDFDocument, data: StudyCertifi
 
 export async function sendStudyCertificate(res: Response, studentId: number, issuedBy: number) {
   const data = getStudyCertificateData(studentId);
-  const issued = await issueDocument("study_certificate", studentId, issuedBy, publicAcademicStudent(data.student), {
+  const issued = await issueDocument("study_certificate", studentId, issuedBy, { ...publicAcademicStudent(data.student), program: certificateProgramName(data.student.program_name) }, {
+    certification: data.certification,
     subjects: printedSubjects(data.currentSubjects),
     calendar: { start: data.calendar.activity_start, end: data.calendar.activity_end, vacations: data.calendar.vacations },
     notes: [`RVOE: ${data.student.rvoe?.trim() || "NO REGISTRADO"}`, `Modalidad: ${modalityLabel(data.student.modality)}`]

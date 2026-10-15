@@ -1,5 +1,6 @@
 import { all, get } from "../db.js";
 import { ApiError } from "../utils.js";
+import type { CertificateAuthority } from "../../shared/plan-certification.js";
 
 /** Semester = curricular progress; cycle = calendar dates. Never infer one from the other. */
 export function getAcademicStudent(studentId: number) {
@@ -9,6 +10,7 @@ export function getAcademicStudent(studentId: number) {
     modality: string; cycle_id: number; cycle_name: string; cycle_start_date: string; cycle_end_date: string;
     curricular_period_name: string | null; curricular_period_number: number | null;
     plan_id: number | null; plan_name: string | null; rvoe: string | null;
+    certificate_authority: CertificateAuthority | null; assigned_plan_id: number | null;
     shift_start_time: string | null; shift_end_time: string | null;
   }>(
     `SELECT st.id, e.id AS enrollment_id, st.student_number, st.curp,
@@ -17,7 +19,8 @@ export function getAcademicStudent(studentId: number) {
       COALESCE(g.study_modality, 'escolarizado') AS modality,
       sc.id AS cycle_id, sc.name AS cycle_name, sc.start_date AS cycle_start_date, sc.end_date AS cycle_end_date,
       cp.name AS curricular_period_name, cp.sequence AS curricular_period_number,
-      pl.id AS plan_id, pl.name AS plan_name, pl.rvoe,
+      pl.id AS plan_id, pl.name AS plan_name, pl.rvoe, pl.certificate_authority,
+      COALESCE(e.plan_id, g.plan_id) AS assigned_plan_id,
       sh.start_time AS shift_start_time, sh.end_time AS shift_end_time
      FROM students st
      JOIN enrollments e ON e.student_id = st.id AND e.is_active = 1

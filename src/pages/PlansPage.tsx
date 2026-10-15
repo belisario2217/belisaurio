@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, Field, Select, StatusBadge } from "../components/Ui";
+import { planCertification, type CertificateAuthority } from "../../shared/plan-certification";
 
 type Plan = {
   id: number;
@@ -14,6 +15,7 @@ type Plan = {
   name: string;
   version: string;
   rvoe: string | null;
+  certificate_authority: CertificateAuthority;
   program_name: string;
   level_name: string;
   subject_count: number;
@@ -53,6 +55,8 @@ const emptySubject = (): SubjectDraft => ({
   hoursPerWeek: ""
 });
 
+const emptyPlanForm = () => ({ programId: "", code: "", matriculationCode: "", name: "", version: "2026", rvoe: "", certificateAuthority: "ifop" as CertificateAuthority, description: "", tuitionAmount: "", assignExisting: true });
+
 export function PlansPage() {
   const { can } = useAuth();
   const toast = useToast();
@@ -64,7 +68,7 @@ export function PlansPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [deleting, setDeleting] = useState<Plan | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ programId: "", code: "", matriculationCode: "", name: "", version: "2026", rvoe: "", description: "", tuitionAmount: "", assignExisting: true });
+  const [form, setForm] = useState(emptyPlanForm);
   const [drafts, setDrafts] = useState<SubjectDraft[]>([emptySubject()]);
 
   async function loadPlans(preferredId?: number) {
@@ -99,7 +103,7 @@ export function PlansPage() {
 
   function openCreate() {
     setEditingPlan(null);
-    setForm({ programId: "", code: "", matriculationCode: "", name: "", version: "2026", rvoe: "", description: "", tuitionAmount: "", assignExisting: true });
+    setForm(emptyPlanForm());
     setDrafts([emptySubject()]);
     setOpen(true);
   }
@@ -115,6 +119,7 @@ export function PlansPage() {
       name: detail.plan.name,
       version: detail.plan.version,
       rvoe: detail.plan.rvoe ?? "",
+      certificateAuthority: detail.plan.certificate_authority,
       description: detail.plan.description ?? "",
       tuitionAmount: String(detail.plan.tuition_amount ?? 0),
       assignExisting: false
@@ -138,7 +143,7 @@ export function PlansPage() {
       toast.success(editingPlan ? "Plan académico actualizado." : "Plan académico creado y créditos calculados.");
       setOpen(false);
       setEditingPlan(null);
-      setForm({ programId: "", code: "", matriculationCode: "", name: "", version: "2026", rvoe: "", description: "", tuitionAmount: "", assignExisting: true });
+      setForm(emptyPlanForm());
       setDrafts([emptySubject()]);
       await loadPlans(saved.id);
     } catch (error) {
@@ -195,7 +200,7 @@ export function PlansPage() {
       <section className="plan-workspace">
         {selected ? <>
           <header className="plan-header">
-            <div><span>{selected.program_name}</span><h2>{selected.name}</h2><p>{selected.code} · Matrícula {selected.matriculation_code} · Versión {selected.version}{selected.rvoe ? ` · RVOE ${selected.rvoe}` : ""}</p></div>
+            <div><span>{selected.program_name}</span><h2>{selected.name}</h2><p>{selected.code} · Matrícula {selected.matriculation_code} · Versión {selected.version}{selected.rvoe ? ` · RVOE ${selected.rvoe}` : ""}</p><p>{planCertification[selected.certificate_authority].label} · CCT {planCertification[selected.certificate_authority].cct}</p></div>
             {can("catalogs.manage") && <div className="plan-header-actions"><Button variant="secondary" icon={<Pencil size={17} />} onClick={openEdit}>Editar</Button><Button variant="secondary" icon={<Power size={17} />} onClick={togglePlan}>{selected.is_active ? "Desactivar" : "Activar"}</Button><Button variant="danger" icon={<Trash2 size={17} />} onClick={() => setDeleting(selected)}>Eliminar</Button></div>}
           </header>
           <div className="plan-summary">
@@ -218,7 +223,8 @@ export function PlansPage() {
             <Field label="Clave del plan" required><input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="LIC-ADM-2026" required /></Field>
             <Field label="Código para matrícula" required hint="Código corto del programa, por ejemplo LE."><input maxLength={10} value={form.matriculationCode} onChange={(event) => setForm({ ...form, matriculationCode: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} placeholder="LE" required /></Field>
             <Field label="Versión" required><input value={form.version} onChange={(event) => setForm({ ...form, version: event.target.value })} required /></Field>
-            <Field label="RVOE" hint="Se mostrará en constancias oficiales."><input value={form.rvoe} onChange={(event) => setForm({ ...form, rvoe: event.target.value.toUpperCase() })} placeholder="20231665" /></Field>
+            <Field label="Institución del plan" required hint={`CCT ${planCertification[form.certificateAuthority].cct}. ${form.certificateAuthority === "ifop" ? "Sin convenio con otra escuela." : "Incluye el convenio de colaboración con UNITEN."}`}><select required value={form.certificateAuthority} onChange={event => setForm({ ...form, certificateAuthority: event.target.value as CertificateAuthority })}><option value="ifop">IFOP · RVOE propio</option><option value="uniten">UNITEN · Convenio de colaboración</option></select></Field>
+            <Field label="RVOE" hint={form.certificateAuthority === "ifop" ? "Número de RVOE propio de IFOP. Es distinto de la CCT." : "Número de RVOE del plan UNITEN."}><input value={form.rvoe} onChange={(event) => setForm({ ...form, rvoe: event.target.value.toUpperCase() })} placeholder="RVOE de este plan" /></Field>
           </div>
           <div className="form-grid two">
             <Field label="Nombre" required><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Plan de estudios 2026" required /></Field>

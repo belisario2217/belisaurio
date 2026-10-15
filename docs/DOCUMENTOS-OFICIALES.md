@@ -35,6 +35,30 @@ Todas las nuevas constancias de ese ciclo usan las mismas fechas, independientem
 semestre. Los eventos sin ciclo o de otro ciclo no aportan vacaciones a una constancia.
 Editar el inicio académico conserva el inicio de cobro previamente utilizado por los alumnos.
 
+## Institución del plan: IFOP y UNITEN
+
+En **Planes académicos → Editar → Institución del plan**, configura quién reconoce el
+plan, independientemente del nombre del programa o del ciclo escolar:
+
+| Institución del plan | Texto de la constancia | CCT |
+| --- | --- | --- |
+| IFOP · RVOE propio | RVOE propio del plan IFOP, sin mencionar UNITEN ni convenio con otra escuela. | 27MSU0108N |
+| UNITEN · Convenio de colaboración | Convenio de colaboración con Centro Universitario Tecnológico de Enfermería (UNITEN) y RVOE de ese plan. | 18PSU0074C |
+
+La **CCT** y el **RVOE** son datos distintos. Se conserva el número de RVOE registrado
+en cada plan; cambiar la institución no inventa ni sustituye ese número. Las constancias
+UNITEN no imprimen la CCT de IFOP. El QR muestra la misma institución, CCT y RVOE que el PDF.
+
+La migración 032 clasifica los planes existentes por su nombre y clave, dando prioridad
+al plan frente al programa; reconoce UNITEN y mantiene los demás como IFOP. La selección
+queda guardada y puede corregirse en el editor. Cambiar después el nombre del plan no
+cambia su institución automáticamente. La inscripción del alumno tiene prioridad sobre
+el plan del grupo. Si el programa tiene planes de ambas instituciones y no hay un plan
+asignado al alumno ni al grupo, se solicita asignarlo antes de emitir la constancia.
+
+Los documentos ya emitidos conservan sus datos originales. Para corregir una constancia
+anterior, revócala desde Documentos emitidos y emite una nueva con el plan correcto.
+
 ## Emisión y validación
 
 En **Documentos**, selecciona al alumno, revisa el semestre y ciclo mostrados y pulsa

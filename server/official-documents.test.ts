@@ -178,6 +178,64 @@ describe("Official documents", () => {
     } finally { run("UPDATE institution_settings SET active_cycle_id=? WHERE id=1", original); }
   });
 
+  it("separates IFOP's own RVOE and CCT from the UNITEN collaboration in both PDF and QR", async () => {
+    for (const authority of ["ifop", "uniten"] as const) {
+      const f = fixture(), rvoe = `${authority.toUpperCase()}-RVOE-PRUEBA`;
+      // The explicit plan governs recognition even if the program's old suffix says otherwise.
+      run("UPDATE programs SET name=? WHERE id=?", `Licenciatura en Enfermería ${authority === "ifop" ? "UNITEN" : "IFOP"}`, f.program);
+      run("UPDATE academic_plans SET certificate_authority=?,rvoe=? WHERE id=?", authority, rvoe, f.plan);
+      const response = await download(`/reports/study-certificate.pdf?studentId=${f.student}`);
+      expect(response.status).toBe(200);
+      const text = (await pdfPages(response.body)).join(" "), issued = lastIssued(f.student);
+      const verified = await request(app).get(`/api/documents/verify/${issued.token}`).expect(200);
+      const cct = authority === "ifop" ? "27MSU0108N" : "18PSU0074C";
+      expect(text).toContain(`CCT ${cct}`); expect(text).toContain(rvoe);
+      expect(text).not.toContain(authority === "ifop" ? "18PSU0074C" : "27MSU0108N");
+      if (authority === "ifop") {
+        expect(text).toContain(`RVOE propio ${rvoe}`); expect(text).not.toMatch(/UNITEN|convenio/i);
+      } else {
+        expect(text).toContain("en convenio de colaboración"); expect(text).toContain("Centro Universitario Tecnológico de Enfermería");
+        expect(text).toContain("UNITEN"); expect(text).not.toContain("RVOE propio");
+      }
+      expect(verified.body.document.content.certification).toMatchObject({ authority, cct, rvoe, collaborationAgreement: authority === "uniten" });
+      expect(verified.body.document.student.program).toBe("Licenciatura en Enfermería");
+      expect(verified.body.document.content.calendar).toMatchObject({ start: "2026-08-10", end: "2027-01-23" });
+      if (authority === "ifop") expect(JSON.stringify(verified.body)).not.toContain("UNITEN");
+      run("UPDATE academic_plans SET certificate_authority=?,rvoe='CORREGIDO' WHERE id=?", authority === "ifop" ? "uniten" : "ifop", f.plan);
+      expect((await request(app).get(`/api/documents/verify/${issued.token}`)).body).toEqual(verified.body);
+    }
+  });
+
+  it("prioritizes the student's assigned plan and refuses to guess between IFOP and UNITEN", async () => {
+    const f = fixture();
+    const uniten = Number(run("INSERT INTO academic_plans(program_id,code,name,version,certificate_authority,rvoe) VALUES(?,?,?,'2026','uniten','UNITEN-PRUEBA')", f.program, `UNITEN-ALT-${sequence}`, "Plan alterno UNITEN").lastInsertRowid);
+    run("UPDATE groups SET plan_id=? WHERE id=?", uniten, f.group);
+    expect(getStudyCertificateData(f.student).certification.authority).toBe("ifop");
+    run("UPDATE enrollments SET plan_id=? WHERE id=?", uniten, f.enrollment);
+    run("UPDATE groups SET plan_id=? WHERE id=?", f.plan, f.group);
+    expect(getStudyCertificateData(f.student).certification.authority).toBe("uniten");
+    run("UPDATE enrollments SET plan_id=NULL WHERE id=?", f.enrollment);
+    expect(getStudyCertificateData(f.student).certification.authority).toBe("ifop");
+    run("UPDATE groups SET plan_id=NULL WHERE id=?", f.group);
+    const response = await download(`/reports/study-certificate.pdf?studentId=${f.student}`);
+    expect(response.status).toBe(409); expect(JSON.parse(response.body.toString()).message).toContain("Asigna el plan IFOP o UNITEN");
+    expect(all("SELECT id FROM issued_documents WHERE student_id=?", f.student)).toHaveLength(0);
+  });
+
+  it("stores the plan's institution explicitly, preserves it when renamed and validates changes without altering its RVOE", async () => {
+    const f = fixture();
+    const body = { programId: f.program, code: `NUEVO-UNITEN-${sequence}`, name: "Plan de colaboración UNITEN", version: "2027", rvoe: "RVOE-CONSERVADO", assignExisting: false,
+      subjects: [{ code: `CERT-SUB-${sequence}`, name: "Asignatura de prueba", subjectType: "mandatory", credits: 5, recommendedPeriod: 1 }] };
+    const created = await request(app).post("/api/plans").set("Authorization", auth).send(body).expect(201);
+    expect(created.body.certificate_authority).toBe("uniten");
+    const renamed = await request(app).put(`/api/plans/${created.body.id}`).set("Authorization", auth).send({ ...body, name: "Plan renombrado sin institución en el título" }).expect(200);
+    expect(renamed.body.certificate_authority).toBe("uniten"); expect(renamed.body.rvoe).toBe(body.rvoe);
+    await request(app).put(`/api/plans/${created.body.id}`).set("Authorization", auth).send({ ...body, certificateAuthority: "otra" }).expect(400);
+    const changed = await request(app).put(`/api/plans/${created.body.id}`).set("Authorization", auth).send({ ...body, certificateAuthority: "ifop" }).expect(200);
+    expect(changed.body.certificate_authority).toBe("ifop"); expect(changed.body.rvoe).toBe(body.rvoe);
+    expect((await request(app).get(`/api/plans/${created.body.id}`).set("Authorization", auth)).body.plan.certificate_authority).toBe("ifop");
+  });
+
   it("validates real dates and complete vacation ranges atomically", async () => {
     const f = fixture();
     const badCalendars = [
