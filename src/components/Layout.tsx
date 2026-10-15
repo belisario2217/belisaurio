@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3, BookOpenCheck, ChevronLeft, ChevronRight, FileBarChart, GraduationCap,
-  LayoutDashboard, LogOut, Menu, Search, Sparkles, Settings, ShieldCheck, SlidersHorizontal, UsersRound, X, BookCopy, CircleGauge, ReceiptText, Megaphone, TableProperties, School, CalendarCheck
+  LayoutDashboard, LogOut, Menu, Search, Sparkles, Settings, ShieldCheck, SlidersHorizontal, UsersRound, X, BookCopy, CircleGauge, ReceiptText, Megaphone, TableProperties, School, CalendarCheck, IdCard
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -22,6 +22,7 @@ const navItems = [
   { to: "/mensajes-admin", label: "Mensajes", icon: Megaphone, permission: "messages.view" },
   { to: "/analiticas", label: "Analíticas", icon: BarChart3, permission: "analytics.view" },
   { to: "/documentos", label: "Documentos", icon: FileBarChart, permission: "reports.view" },
+  { to: "/credenciales", label: "Credenciales", icon: IdCard, permission: "credentials.manage" },
   { to: "/nomina", label: "Nómina", icon: UsersRound, permission: "payments.view" },
   { to: "/balance", label: "Balance", icon: ReceiptText, permission: "payments.view" },
   { to: "/asistente-importacion", label: "Asistente de archivos", icon: Sparkles, permission: "import" },
@@ -29,6 +30,7 @@ const navItems = [
   { to: "/catalogos", label: "Catálogos", icon: SlidersHorizontal, permission: "catalogs.view" },
   { to: "/planes", label: "Planes académicos", icon: BookCopy, permission: "catalogs.view" },
   { to: "/mi-avance", label: "Mi avance", icon: CircleGauge, permission: "portal.view", studentOnly: true },
+  { to: "/mi-credencial", label: "Mi credencial", icon: IdCard, permission: "portal.view", studentOnly: true },
   { to: "/mensajes", label: "Mensajes importantes", icon: Megaphone, permission: "portal.view", studentOnly: true },
   { to: "/usuarios", label: "Usuarios y roles", icon: UsersRound, permission: "users.manage" },
   { to: "/configuracion", label: "Configuración", icon: Settings, permission: "settings.manage" }
@@ -46,12 +48,14 @@ const titles: Record<string, string> = {
   "/analiticas": "Analíticas académicas",
   "/reportes": "Reportes y avance académico",
   "/documentos": "Documentos oficiales",
+  "/credenciales": "Credenciales estudiantiles",
   "/nomina": "Nómina docente y administrativa",
   "/balance": "Balance mensual",
   "/asistente-importacion": "Asistente de archivos",
   "/catalogos": "Catálogos administrativos",
   "/planes": "Planes académicos",
   "/mi-avance": "Mi avance curricular",
+  "/mi-credencial": "Mi credencial",
   "/mensajes": "Mensajes importantes",
   "/usuarios": "Usuarios y roles",
   "/configuracion": "Configuración institucional"
@@ -61,7 +65,7 @@ const sections = [
   { name: "Inicio", paths: ["/"] },
   { name: "Control académico", paths: ["/alumnos", "/grupos", "/calificaciones", "/asistencia", "/mi-avance"] },
   { name: "Finanzas", paths: ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina"] },
-  { name: "Información y documentos", paths: ["/reportes", "/documentos", "/analiticas", "/asistente-importacion"] },
+  { name: "Información y documentos", paths: ["/reportes", "/documentos", "/credenciales", "/mi-credencial", "/analiticas", "/asistente-importacion"] },
   { name: "Comunicación", paths: ["/mensajes-admin", "/mensajes"] },
   { name: "Administración", paths: ["/catalogos", "/planes", "/usuarios", "/configuracion"] }
 ];
@@ -91,7 +95,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [institution, setInstitution] = useState<Institution | null>(null);
 
   useEffect(() => {
-    api<{ settings: Institution }>("/settings").then((data) => setInstitution(data.settings)).catch(() => undefined);
+    api<Institution>("/branding").then(setInstitution).catch(() => undefined);
   }, []);
   useEffect(() => setMobileOpen(false), [location.pathname]);
 

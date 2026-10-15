@@ -70,6 +70,10 @@ materias, docentes, criterios, escalas y estatus no están fijados en la interfa
 Consulta la [guía de documentos oficiales y validación por QR](docs/DOCUMENTOS-OFICIALES.md)
 para configurar la emisión de boletas, historial, constancias y estados de cuenta.
 
+Consulta la [guía de credenciales estudiantiles](docs/CREDENCIALES.md) para personalizar
+el formato, cargar fotografías, activar la descarga en el portal y validar su vigencia
+por QR. La vigencia termina al cerrar el ciclo activo, con un máximo de seis meses.
+
 ## Funcionalidad incluida
 
 - Inicio de sesión, usuarios activos/inactivos, roles y permisos editables.
@@ -86,6 +90,7 @@ para configurar la emisión de boletas, historial, constancias y estados de cuen
 - Planes académicos con asignaturas obligatorias u optativas, créditos y periodo sugerido.
 - Edición completa de planes existentes, incluyendo su estructura de asignaturas.
 - Portal del alumno con materias, parciales, promedio y avance curricular por créditos.
+- Credenciales personalizables con fotografía original, activación administrativa, QR de vigencia y PDF de dos caras o impresión en hoja carta.
 - Vinculación de cuentas con rol Alumno a su matrícula y correo institucional.
 - Importación de calificaciones con actualización o exclusión de existentes.
 - Bloqueo de captura e historial de cada modificación.
