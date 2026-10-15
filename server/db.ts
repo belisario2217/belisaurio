@@ -106,6 +106,7 @@ const permissions = [
   ["grades.close", "Cerrar captura", "grades"],
   ["reports.view", "Consultar reportes", "reports"],
   ["reports.generate", "Generar documentos", "reports"],
+  ["credentials.manage", "Diseñar y activar credenciales de estudiantes", "credentials"],
   ["analytics.view", "Consultar analíticas", "analytics"],
   ["users.manage", "Administrar usuarios", "security"],
   ["roles.manage", "Administrar roles", "security"],
@@ -130,7 +131,7 @@ export function seed() {
     );
 
     permissions.forEach(([code, name, module]) =>
-      run("INSERT INTO permissions(code, name, module) VALUES (?, ?, ?)", code, name, module)
+      run("INSERT OR IGNORE INTO permissions(code, name, module) VALUES (?, ?, ?)", code, name, module)
     );
 
     const adminRole = get<{ id: number }>("SELECT id FROM roles WHERE name = 'Administrador'")!;
@@ -142,7 +143,7 @@ export function seed() {
     const permissionSets: Record<string, string[]> = {
       "Coordinador académico": permissions.map(([code]) => code).filter((code) => !["users.manage", "roles.manage"].includes(code)),
       Docente: ["dashboard.view", "students.view", "grades.view", "grades.manage", "reports.view", "analytics.view"],
-      "Control escolar": ["dashboard.view", "students.view", "students.manage", "students.import", "students.export", "catalogs.view", "grades.view", "grades.export", "reports.view", "reports.generate", "analytics.view"],
+      "Control escolar": ["dashboard.view", "students.view", "students.manage", "students.import", "students.export", "catalogs.view", "grades.view", "grades.export", "reports.view", "reports.generate", "credentials.manage", "analytics.view"],
       Consulta: ["dashboard.view", "students.view", "catalogs.view", "grades.view", "reports.view", "analytics.view"]
     };
     Object.entries(permissionSets).forEach(([roleName, codes]) => {

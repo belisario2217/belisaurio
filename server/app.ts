@@ -25,6 +25,7 @@ import { improvementsRouter } from "./routes/improvements.js";
 import { importAssistantRouter } from "./routes/import-assistant.js";
 import { attendanceRouter } from "./routes/attendance.js";
 import { documentVerificationRouter } from "./routes/document-verification.js";
+import { credentialPublicRouter, credentialsRouter, portalCredentialRouter } from "./routes/credentials.js";
 import { ensureAllStudentAccounts } from "./services/student-account.js";
 import { defaultInstitutionLogoUrl, institutionLogoPublicUrl } from "./services/institution-logo.js";
 
@@ -46,16 +47,19 @@ app.use("/uploads", express.static(uploadsDir));
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "Universidad IFOP API" }));
 app.get("/api/branding", (_req, res) => {
-  const settings = get<{ institution_name: string; logo_path: string | null }>(
-    "SELECT institution_name, logo_path FROM institution_settings WHERE id = 1"
+  const settings = get<{ institution_name: string; logo_path: string | null; active_cycle_name: string | null }>(
+    "SELECT i.institution_name, i.logo_path, sc.name AS active_cycle_name FROM institution_settings i LEFT JOIN school_cycles sc ON sc.id=i.active_cycle_id WHERE i.id=1"
   );
   res.json({
     institution_name: settings?.institution_name || "Universidad IFOP",
-    logo_path: institutionLogoPublicUrl(settings?.logo_path ?? defaultInstitutionLogoUrl)
+    logo_path: institutionLogoPublicUrl(settings?.logo_path ?? defaultInstitutionLogoUrl),
+    active_cycle_name: settings?.active_cycle_name ?? null
   });
 });
 app.use("/api/auth", authRouter);
 app.use("/api/documents", documentVerificationRouter);
+app.use("/api/credentials", credentialPublicRouter);
+app.use("/api/credentials", authenticate, credentialsRouter);
 app.use("/api/catalogs", authenticate, catalogsRouter);
 app.use("/api/students", authenticate, studentsRouter);
 app.use("/api/grades", authenticate, gradesRouter);
@@ -65,6 +69,7 @@ app.use("/api/settings", authenticate, settingsRouter);
 app.use("/api/reports", authenticate, reportsRouter);
 app.use("/api/plans", authenticate, plansRouter);
 app.use("/api/portal", authenticate, portalRouter);
+app.use("/api/portal", authenticate, portalCredentialRouter);
 app.use("/api/payments", authenticate, paymentsRouter);
 app.use("/api/messages", authenticate, messagesRouter);
 app.use("/api/group-management", authenticate, groupManagementRouter);

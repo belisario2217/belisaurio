@@ -37,7 +37,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const response = await fetch(apiUrl(path), { ...options, headers, body: body as BodyInit });
   if (response.status === 401 && path !== "/auth/login") {
     setToken(null);
-    if (!window.location.pathname.startsWith("/verificar-documento/")) window.location.assign("/login");
+    if (!/^\/verificar-(documento|credencial)\//.test(window.location.pathname)) window.location.assign("/login");
   }
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "No fue posible completar la solicitud." }));

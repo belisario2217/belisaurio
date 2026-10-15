@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Award, Banknote, BookOpenCheck, CalendarCheck, CircleGauge, Clock3, GraduationCap, KeyRound, ReceiptText } from "lucide-react";
+import { Award, Banknote, BookOpenCheck, CalendarCheck, CircleGauge, Clock3, GraduationCap, KeyRound, ReceiptText, IdCard, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import "../credentials.css";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
@@ -132,6 +134,8 @@ export function StudentPortalPage() {
           <small>{student.plan_code}</small>
         </div>
       </section>
+
+      <Link className="cred-portal-link" to="/mi-credencial"><IdCard size={28} /><div><strong>Mi credencial</strong><span>Consulta su activación, vigencia y descarga tu credencial estudiantil.</span></div><ArrowRight size={19} /></Link>
 
       <section className="toolbar">
         <div className="toolbar-primary">

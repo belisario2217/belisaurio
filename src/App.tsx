@@ -27,6 +27,9 @@ const StudentMessagesPage = lazy(() => import("./pages/StudentMessagesPage").the
 const GroupManagementPage = lazy(() => import("./pages/GroupManagementPage").then((module) => ({ default: module.GroupManagementPage })));
 const AttendancePage = lazy(() => import("./pages/AttendancePage").then((module) => ({ default: module.AttendancePage })));
 const DocumentVerificationPage = lazy(() => import("./pages/DocumentVerificationPage").then(module => ({ default: module.DocumentVerificationPage })));
+const CredentialsPage = lazy(() => import("./pages/CredentialsPage").then(module => ({ default: module.CredentialsPage })));
+const MyCredentialPage = lazy(() => import("./pages/MyCredentialPage").then(module => ({ default: module.MyCredentialPage })));
+const CredentialVerificationPage = lazy(() => import("./pages/CredentialVerificationPage").then(module => ({ default: module.CredentialVerificationPage })));
 
 function HomePage() {
   const { user, can } = useAuth();
@@ -47,6 +50,7 @@ export function App() {
     <Suspense fallback={<div className="app-loader"><LoaderCircle className="spin" size={28} /><span>Cargando módulo</span></div>}>
       <Routes>
         <Route path="/verificar-documento/:token" element={<DocumentVerificationPage />} />
+        <Route path="/verificar-credencial/:token" element={<CredentialVerificationPage />} />
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="*" element={
           <Protected>
@@ -64,12 +68,14 @@ export function App() {
               <Route path="/analiticas" element={<AnalyticsPage />} />
               <Route path="/reportes" element={<ReportsPage />} />
               <Route path="/documentos" element={<ReportsPage view="documents" />} />
+              <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/cobros" element={<PaymentsPage />} />
               <Route path="/colegiaturas-mensuales" element={<TuitionGridPage />} />
               <Route path="/mensajes-admin" element={<MessagesAdminPage />} />
               <Route path="/catalogos" element={<CatalogsPage />} />
               <Route path="/planes" element={<PlansPage />} />
               <Route path="/mi-avance" element={<StudentPortalPage />} />
+              <Route path="/mi-credencial" element={<MyCredentialPage />} />
               <Route path="/mensajes" element={<StudentMessagesPage />} />
               <Route path="/usuarios" element={<UsersPage />} />
               <Route path="/configuracion" element={<SettingsPage />} />
