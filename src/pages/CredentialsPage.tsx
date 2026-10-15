@@ -4,11 +4,12 @@ import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Button, EmptyState, Field, LoadingState } from "../components/Ui";
+import { CredentialPhotoReview } from "../components/CredentialPhotoReview";
 import { CredentialPreview, CredentialStatusPill, CredentialValidityPanel } from "../components/CredentialPreview";
 import { defaultCredentialTemplate, type CredentialFraming, type CredentialSnapshot, type CredentialState, type CredentialTemplate } from "../../shared/credentials";
 import "../credentials.css";
 
-type Roster = { records: Array<{ id: number; name: string; student_number: string; is_active: number; has_photo: number }>; page: number; pages: number; total: number };
+type Roster = { records: Array<{ id: number; name: string; student_number: string; is_active: number; has_photo: number; pending_photo: number }>; page: number; pages: number; total: number; pending_total: number };
 const message = (error: unknown) => error instanceof Error ? error.message : "No fue posible completar la solicitud.";
 const templateFields: Array<{ key: keyof CredentialTemplate; label: string; max: number; multiline?: boolean }> = [
   { key: "institution", label: "Institución", max: 160 }, { key: "campus", label: "Campus", max: 90 },
@@ -21,7 +22,7 @@ const templateFields: Array<{ key: keyof CredentialTemplate; label: string; max:
 
 export function CredentialsPage() {
   const { can } = useAuth(), toast = useToast();
-  const [tab, setTab] = useState<"issue" | "design">("issue");
+  const [tab, setTab] = useState<"issue" | "photos" | "design">("issue");
   const [search, setSearch] = useState(""), [page, setPage] = useState(1);
   const [roster, setRoster] = useState<Roster | null>(null), [rosterLoading, setRosterLoading] = useState(true);
   const [id, setId] = useState<number | null>(null), [state, setState] = useState<CredentialState | null>(null);
@@ -40,10 +41,10 @@ export function CredentialsPage() {
   useEffect(() => {
     if (!allowed) return;
     const controller = new AbortController(); setRosterLoading(true);
-    const timer = window.setTimeout(() => api<Roster>(`/credentials/students?search=${encodeURIComponent(search)}&page=${page}`, { signal: controller.signal })
+    const timer = window.setTimeout(() => api<Roster>(`/credentials/students?search=${encodeURIComponent(search)}&page=${page}&pendingPhotos=${tab === "photos" ? "1" : "0"}`, { signal: controller.signal })
       .then(setRoster).catch(e => { if (!controller.signal.aborted) setError(message(e)); }).finally(() => { if (!controller.signal.aborted) setRosterLoading(false); }), 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [allowed, search, page, reload]);
+  }, [allowed, search, page, reload, tab]);
   useEffect(() => {
     if (!id || !allowed) return;
     const controller = new AbortController(); setState(null); setPhoto(null); setError("");
@@ -95,21 +96,23 @@ export function CredentialsPage() {
     <header className="cred-header"><div className="cred-heading-icon"><IdCard size={28} /></div><div><span className="cred-eyebrow">IDENTIDAD ESTUDIANTIL</span><h2>Credenciales</h2><p>Una identidad oficial, lista para acompañar a cada estudiante.</p></div></header>
     <div className="cred-tabs" role="tablist" aria-label="Administración de credenciales">
       <button role="tab" aria-selected={tab === "issue"} onClick={() => setTab("issue")}><IdCard size={17} /> Emitir credencial</button>
+      <button role="tab" aria-selected={tab === "photos"} onClick={() => { setTab("photos"); setPage(1); setId(null); setReload(value=>value+1); }}> <Camera size={17} /> Fotos por revisar{roster?.pending_total ? ` (${roster.pending_total})` : ""}</button>
       <button role="tab" aria-selected={tab === "design"} onClick={() => setTab("design")}><Palette size={17} /> Personalizar diseño</button>
     </div>
     {error && <div className="cred-error" role="alert"><span>{error}</span><button className="icon-button" aria-label="Cerrar aviso" onClick={() => setError("")}><X size={17} /></button></div>}
-    {tab === "issue" ? <div className="cred-workspace">
-      <aside className="cred-roster"><div className="cred-panel-title"><span className="cred-step">1</span><div><h3>Selecciona al alumno</h3><p>Busca en el padrón completo.</p></div></div>
+    {tab !== "design" ? <div className="cred-workspace">
+      <aside className="cred-roster"><div className="cred-panel-title"><span className="cred-step">1</span><div><h3>{tab === "photos" ? "Fotos pendientes" : "Selecciona al alumno"}</h3><p>{tab === "photos" ? "Enviadas desde el portal del alumno." : "Busca en el padrón completo."}</p></div></div>
         <label className="cred-search"><Search size={17} /><input aria-label="Buscar por nombre o matrícula" value={search} placeholder="Nombre o matrícula" onChange={e => { setSearch(e.target.value); setPage(1); }} /></label>
         <div className="cred-roster-meta" aria-live="polite">{rosterLoading ? "Buscando…" : `${roster?.total || 0} alumnos`}</div>
         <div className="cred-students" aria-busy={rosterLoading}>{!rosterLoading && roster?.records.map(student => <button key={student.id} disabled={Boolean(busy)} className={id === student.id ? "selected" : ""} onClick={() => setId(student.id)}>
-          <span className="cred-student-avatar"><UserRound size={18} /></span><span><strong>{student.name}</strong><small>{student.student_number}{!student.is_active ? " · Inactivo" : ""}</small></span>{id === student.id && <Check size={16} />}
-        </button>)}{!rosterLoading && !roster?.records.length && <p className="cred-help">No se encontraron alumnos. Prueba otro nombre o matrícula.</p>}</div>
+          <span className="cred-student-avatar"><UserRound size={18} /></span><span><strong>{student.name}</strong><small>{student.student_number}{student.pending_photo ? " · Foto por revisar" : ""}{!student.is_active ? " · Inactivo" : ""}</small></span>{id === student.id && <Check size={16} />}
+        </button>)}{!rosterLoading && !roster?.records.length && <p className="cred-help">{tab === "photos" ? "No hay fotografías pendientes de revisión con esta búsqueda." : "No se encontraron alumnos. Prueba otro nombre o matrícula."}</p>}</div>
         {Boolean(roster?.pages) && <div className="cred-pagination"><button aria-label="Página anterior" disabled={page <= 1 || rosterLoading} onClick={() => setPage(p => p - 1)}><ChevronLeft size={17} /></button><span>{page} / {roster?.pages}</span><button aria-label="Página siguiente" disabled={page >= (roster?.pages || 1) || rosterLoading} onClick={() => setPage(p => p + 1)}><ChevronRight size={17} /></button></div>}
       </aside>
-      {!id ? <section className="cred-welcome"><div className="cred-welcome-art"><IdCard size={62} strokeWidth={1} /><span><ShieldCheck size={22} /></span></div><span className="cred-eyebrow">DEL PADRÓN A SU PORTAL</span><h3>Su credencial empieza aquí</h3><p>Selecciona un alumno, carga su fotografía y revisa ambas caras. Al activarla, estará disponible en su portal.</p><div className="cred-welcome-steps"><span>01 · Selecciona</span><span>02 · Fotografía</span><span>03 · Activa</span></div></section>
+      {!id ? <section className="cred-welcome"><div className="cred-welcome-art"><IdCard size={62} strokeWidth={1} /><span><ShieldCheck size={22} /></span></div><span className="cred-eyebrow">DEL PADRÓN A SU PORTAL</span><h3>{tab === "photos" ? "Fotos enviadas para revisión" : "Su credencial empieza aquí"}</h3><p>{tab === "photos" ? "Selecciona un alumno para revisar su foto, ajustar el encuadre y aprobar la publicación de su credencial." : "Selecciona un alumno, carga su fotografía y revisa ambas caras. Al activarla, estará disponible en su portal."}</p><div className="cred-welcome-steps"><span>01 · Selecciona</span><span>02 · Fotografía</span><span>03 · Activa</span></div></section>
       : !state ? <LoadingState label="Preparando la credencial" /> : <section className="cred-editor">
         <div className="cred-editor-top"><div><span className="cred-eyebrow">EXPEDIENTE ESTUDIANTIL</span><h3>{state.student.name}</h3><small>Los datos se completan automáticamente desde el padrón.</small></div><div className="cred-state-actions"><CredentialStatusPill status={state.status} /><button className="icon-button" disabled={Boolean(busy)} title="Actualizar datos" aria-label="Actualizar datos de la credencial" onClick={() => setReload(n => n + 1)}><RefreshCw size={16} /></button></div></div>
+        <CredentialPhotoReview key={state.student.id} state={state} signature={signature} onReviewed={value => { acceptState(value); setReload(n => n + 1); toast.success(value.submission?.status === "approved" ? "Fotografía aprobada y credencial publicada." : "Se enviaron las correcciones al alumno."); }} />
         <div className="cred-editor-body"><div className="cred-controls">
           <dl className="cred-student-fields"><div><dt>Matrícula</dt><dd>{state.student.number}</dd></div><div><dt>Programa académico</dt><dd>{state.student.program}</dd></div><div><dt>Grupo</dt><dd>{state.student.group || "Sin grupo"}</dd></div></dl>
           <div className="cred-panel-title"><span className="cred-step">2</span><div><h3>Fotografía y encuadre</h3><p>Revisa su posición en la vista previa.</p></div></div>

@@ -27,7 +27,7 @@ function escapeXml(value: string) { return value.replace(/[&<>"']/g, c => ({"&":
 export type CredentialArtworkAssets = { logo?: string | null; photo?: string | null; signature?: string | null; qr?: { size: number; data: ArrayLike<number> } | null };
 
 /** Geometry shared by SVG previews and native PDF image placement. */
-export function credentialImageLayout(snapshot: CredentialSnapshot) {
+export function credentialImageLayout(snapshot: Pick<CredentialSnapshot,"photo" | "framing">) {
   const logoSize = 84, imageSize = logoSize / .95, offset = (imageSize - logoSize) / 2;
   const scale = Math.max(420 / snapshot.photo.width, 420 / snapshot.photo.height) * snapshot.framing.zoom;
   const width = snapshot.photo.width * scale, height = snapshot.photo.height * scale;

@@ -41,10 +41,17 @@ export type CredentialSnapshot = {
   issuedAt: string; folio: string; validity: CredentialValidity | null;
 };
 export type CredentialStatus = "missing_photo" | "draft" | "active" | "revoked" | "expired" | "needs_review" | "inactive";
+export type CredentialPhotoSubmission = {
+  id: string; status: "pending" | "approved" | "rejected" | "superseded";
+  submittedAt: string; reviewedAt: string | null; reviewNote: string | null;
+  photo: CredentialPhoto; framing: CredentialFraming;
+  processing: { adjusted: boolean; borderCoverage: number; note: string };
+};
 export type CredentialState = {
   student: CredentialStudent; template: CredentialTemplate; revision: number; framing: CredentialFraming;
   photo: CredentialPhoto | null; status: CredentialStatus; canDownload: boolean;
   validity: CredentialValidity | null;
+  submission: CredentialPhotoSubmission | null;
   issue: { id: string; folio: string; issuedAt: string; verificationUrl: string; snapshot: CredentialSnapshot; qr: { size: number; data: number[] } } | null;
 };
 export type CredentialVerification = {

@@ -7,12 +7,20 @@ import { all, databasePath, get, run, transaction } from "../db.js";
 import { ApiError, cleanText } from "../utils.js";
 import { publicAppUrl } from "./document-verification.js";
 import { validCalendarDate } from "./academic-calendar.js";
-import { defaultCredentialTemplate, type CredentialFraming, type CredentialSnapshot, type CredentialState, type CredentialStatus, type CredentialStudent, type CredentialTemplate, type CredentialValidity, type CredentialVerification } from "../../shared/credentials.js";
+import { defaultCredentialTemplate, type CredentialFraming, type CredentialPhotoSubmission, type CredentialSnapshot, type CredentialState, type CredentialStatus, type CredentialStudent, type CredentialTemplate, type CredentialValidity, type CredentialVerification } from "../../shared/credentials.js";
 import { buildCredentialPdf, credentialPdfVersion } from "./credential-pdf.js";
+import { prepareCredentialPhoto } from "./credential-photo-preparation.js";
 
 const vault = path.join(path.dirname(databasePath), "credentials");
 type Profile = { student_id: number; photo_file: string; photo_width: number; photo_height: number; photo_hash: string; crop_x: number; crop_y: number; zoom: number; valid_until: string | null; revision: number };
 export type CredentialIssueRow = { id: string; token: string; folio: string; student_id: number | null; photo_file: string; card_file: string; print_file: string; snapshot_json: string; snapshot_hash: string; verification_url: string; issued_at: string; revoked_at: string | null; revocation_reason: string | null };
+type PhotoSubmissionRow = {
+  id: string; student_id: number; status: CredentialPhotoSubmission["status"];
+  source_file: string; original_file: string; prepared_file: string; original_hash: string; prepared_hash: string;
+  width: number; height: number; crop_x: number; crop_y: number; zoom: number; processing_json: string;
+  submitted_at: string; reviewed_at: string | null; review_note: string | null;
+  approved_variant: "original" | "prepared" | null;
+};
 const digest = (value: string | Buffer) => crypto.createHash("sha256").update(value).digest("hex");
 export const credentialToday = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Mexico_City" }).format(new Date());
 
@@ -158,6 +166,7 @@ export function getCredentialState(studentId: number): CredentialState {
     student, template, status, revision: current?.revision ?? 0, validity: credentialValidity(student),
     framing: { cropX: current?.crop_x ?? .5, cropY: current?.crop_y ?? .5, zoom: current?.zoom ?? 1 },
     photo: current ? { width: current.photo_width, height: current.photo_height, sha256: current.photo_hash } : null,
+    submission: publicPhotoSubmission(latestPhotoSubmission(studentId)),
     canDownload: status === "active", issue: issue && qr ? { id: issue.id, folio: issue.folio, issuedAt: issue.issued_at,
       verificationUrl: issue.verification_url, snapshot: JSON.parse(issue.snapshot_json), qr: { size: qr.size, data: Array.from(qr.data) } } : null
   };
@@ -214,30 +223,42 @@ export function deactivateCredential(studentId: number, revision: unknown, userI
   return getCredentialState(studentId);
 }
 
-export async function activateCredential(studentId: number, body: any, userId: number) {
+export async function activateCredential(studentId: number, body: any, userId: number,
+  submission?: { row: PhotoSubmissionRow; variant: "original" | "prepared" }) {
   const state = getCredentialState(studentId), current = expectRevision(studentId, body.revision);
-  if (!current || !state.photo || !fs.existsSync(credentialFile(current.photo_file))) throw new ApiError(409, "Carga una fotografía antes de activar la credencial.");
+  const photoFile = submission ? submission.row[`${submission.variant}_file`] : current?.photo_file;
+  const photo = submission ? { width: submission.row.width, height: submission.row.height, sha256: submission.row[`${submission.variant}_hash`] } : state.photo;
+  if (!photoFile || !photo || !fs.existsSync(credentialFile(photoFile))) throw new ApiError(409, "Carga una fotografía antes de activar la credencial.");
+  if (submission && digest(fs.readFileSync(credentialFile(photoFile))) !== photo.sha256) throw new ApiError(409, "No se pudo comprobar la foto enviada. Solicita una nueva fotografía.");
   if (!state.student.active || !state.student.enrolled) throw new ApiError(409, "El alumno debe tener una inscripción activa para recibir su credencial.");
   if (body.templateVersion !== undefined && Number(body.templateVersion) !== state.template.version) throw new ApiError(409, "El diseño institucional cambió. Recarga la página para revisar la versión actual antes de activar.");
   if (!state.validity) throw new ApiError(409, "Configura las fechas de inicio y término del ciclo escolar activo antes de activar la credencial.");
   if (credentialToday() < state.validity.cycleStart || credentialToday() > state.validity.cycleEnd) throw new ApiError(409, "La fecha actual debe estar dentro del ciclo escolar activo. Revisa su calendario.");
-  const framing = validateCredentialFraming(body, state.framing), id = crypto.randomUUID(), token = crypto.randomBytes(24).toString("hex");
+  const framing = validateCredentialFraming(body, submission ? { cropX: submission.row.crop_x, cropY: submission.row.crop_y, zoom: submission.row.zoom } : state.framing), id = crypto.randomUUID(), token = crypto.randomBytes(24).toString("hex");
   const issuedAt = new Date().toISOString(), folio = `CEST-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
   const verificationUrl = `${publicAppUrl()}/verificar-credencial/${token}`;
-  const snapshot: CredentialSnapshot = { student: state.student, template: state.template, framing, photo: state.photo, issuedAt, folio, validity: state.validity };
-  const card = await buildCredentialPdf(snapshot, current.photo_file, verificationUrl, "card");
-  const print = await buildCredentialPdf(snapshot, current.photo_file, verificationUrl, "letter");
+  const snapshot: CredentialSnapshot = { student: state.student, template: state.template, framing, photo, issuedAt, folio, validity: state.validity };
+  const card = await buildCredentialPdf(snapshot, photoFile, verificationUrl, "card");
+  const print = await buildCredentialPdf(snapshot, photoFile, verificationUrl, "letter");
   const files = [`issues/${id}-card-v${credentialPdfVersion}.pdf`, `issues/${id}-print-v${credentialPdfVersion}.pdf`];
   try {
     writeFile(files[0], card); writeFile(files[1], print);
     transaction(() => {
       expectRevision(studentId, body.revision);
+      if (submission && photoSubmission(studentId, submission.row.id).status !== "pending") throw new ApiError(409, "La foto cambió o ya fue revisada. Recarga antes de aprobar.");
       if (credentialTemplate().version !== state.template.version || JSON.stringify(credentialStudent(studentId)) !== JSON.stringify(state.student)) throw new ApiError(409, "Los datos del alumno o el diseño cambiaron. Recarga y vuelve a activar.");
       revokeCurrent(studentId, "reissued");
       const json = JSON.stringify(snapshot);
       run(`INSERT INTO credential_issues(id,token,folio,student_id,photo_file,card_file,print_file,snapshot_json,snapshot_hash,verification_url,issued_by,issued_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, token, folio, studentId, current.photo_file, files[0], files[1], json, digest(json), verificationUrl, userId, issuedAt);
-      run("UPDATE student_credentials SET crop_x=?,crop_y=?,zoom=?,valid_until=?,revision=revision+1,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE student_id=?", framing.cropX, framing.cropY, framing.zoom, state.validity!.validUntil, userId, studentId);
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, token, folio, studentId, photoFile, files[0], files[1], json, digest(json), verificationUrl, userId, issuedAt);
+      run(`INSERT INTO student_credentials(student_id,photo_file,photo_width,photo_height,photo_hash,crop_x,crop_y,zoom,valid_until,updated_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(student_id) DO UPDATE SET photo_file=excluded.photo_file,
+        photo_width=excluded.photo_width,photo_height=excluded.photo_height,photo_hash=excluded.photo_hash,
+        crop_x=excluded.crop_x,crop_y=excluded.crop_y,zoom=excluded.zoom,valid_until=excluded.valid_until,
+        revision=student_credentials.revision+1,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP`,
+        studentId, photoFile, photo.width, photo.height, photo.sha256, framing.cropX, framing.cropY, framing.zoom, state.validity!.validUntil, userId);
+      if (submission) run(`UPDATE credential_photo_submissions SET status='approved',reviewed_by=?,reviewed_at=?,
+        issue_id=?,approved_variant=?,crop_x=?,crop_y=?,zoom=? WHERE id=?`, userId,issuedAt,id,submission.variant,framing.cropX,framing.cropY,framing.zoom,submission.row.id);
     });
   } catch (error) { removeFiles(files); throw error; }
   return getCredentialState(studentId);
@@ -289,12 +310,87 @@ export function verifyCredential(token: string): CredentialVerification {
     photoUrl: status === "active" ? `/api/credentials/verify/${token}/photo` : null };
 }
 
-export function searchCredentialStudents(search: string, page: number) {
+function latestPhotoSubmission(studentId: number) {
+  return get<PhotoSubmissionRow>("SELECT * FROM credential_photo_submissions WHERE student_id=? ORDER BY submitted_at DESC,rowid DESC LIMIT 1", studentId);
+}
+function publicPhotoSubmission(row: PhotoSubmissionRow | undefined): CredentialPhotoSubmission | null {
+  return row ? { id: row.id, status: row.status, submittedAt: row.submitted_at, reviewedAt: row.reviewed_at, reviewNote: row.review_note,
+    photo: { width: row.width, height: row.height, sha256: row.approved_variant === "original" ? row.original_hash : row.prepared_hash },
+    framing: { cropX: row.crop_x, cropY: row.crop_y, zoom: row.zoom }, processing: JSON.parse(row.processing_json) } : null;
+}
+function photoSubmission(studentId: number, id: string) {
+  const row = get<PhotoSubmissionRow>("SELECT * FROM credential_photo_submissions WHERE id=? AND student_id=?",id,studentId);
+  if (!row) throw new ApiError(404, "No se encontró la foto enviada por este alumno.");
+  return row;
+}
+export async function photoSubmissionImage(studentId: number, id: string | undefined, variant: unknown) {
+  if (variant !== undefined && variant !== "original" && variant !== "prepared") throw new ApiError(400, "Selecciona una versión válida de la fotografía.");
+  const row = id ? photoSubmission(studentId,id) : latestPhotoSubmission(studentId);
+  if (!row) throw new ApiError(404, "Aún no has enviado una fotografía.");
+  return credentialImageData(variant === "original" || (variant === undefined && row.approved_variant === "original") ? row.original_file : row.prepared_file);
+}
+let photoProcessing: Promise<unknown> = Promise.resolve();
+let queuedPhotos = 0;
+export function submitCredentialPhoto(studentId: number, buffer: Buffer, body: any, userId: number): Promise<CredentialState> {
+  if (queuedPhotos >= 4) return Promise.reject(new ApiError(503, "Se están preparando varias fotografías. Espera unos segundos y vuelve a enviar la tuya."));
+  queuedPhotos++;
+  const work = photoProcessing.then(async () => {
+    const student = credentialStudent(studentId);
+    if (!student.active || !student.enrolled) throw new ApiError(403, "Necesitas una inscripción activa para enviar tu fotografía.");
+    if (body.requirementsAccepted !== "true" && body.requirementsAccepted !== true) throw new ApiError(400, "Confirma que la fotografía cumple con el fondo blanco, uniforme y rostro centrado.");
+    const previous = () => latestPhotoSubmission(studentId)?.id || "";
+    if (String(body.previousId || "") !== previous()) throw new ApiError(409, "Tu envío cambió. Actualiza la página antes de enviar otra foto.");
+    const info = await inspectCredentialImage(buffer);
+    if (info.width < 320 || info.height < 320) throw new ApiError(400, "Usa una foto de al menos 320 × 320 píxeles para que tu credencial sea legible.");
+    const framing = validateCredentialFraming(body,{ cropX: .5, cropY: .5, zoom: 1 });
+    const prepared = await prepareCredentialPhoto(buffer,body.improveBackground !== "false" && body.improveBackground !== false);
+    const id = crypto.randomUUID(), sourceFile = `photos/${id}-source.${info.extension}`, originalFile = `photos/${id}-original.jpg`;
+    const preparedFile = prepared.processing.adjusted ? `photos/${id}-prepared.jpg` : originalFile;
+    const files = [sourceFile,originalFile,...(preparedFile === originalFile ? [] : [preparedFile])];
+    try {
+      writeFile(sourceFile,buffer); writeFile(originalFile,prepared.original);
+      if (preparedFile !== originalFile) writeFile(preparedFile,prepared.prepared);
+      transaction(() => {
+        if (String(body.previousId || "") !== previous()) throw new ApiError(409, "Tu envío cambió. Revisa la última foto antes de reemplazarla.");
+        const now = new Date().toISOString();
+        run("UPDATE credential_photo_submissions SET status='superseded',reviewed_at=? WHERE student_id=? AND status='pending'",now,studentId);
+        run(`INSERT INTO credential_photo_submissions(id,student_id,source_file,original_file,prepared_file,original_hash,prepared_hash,
+          width,height,crop_x,crop_y,zoom,processing_json,submitted_by,submitted_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          id,studentId,sourceFile,originalFile,preparedFile,digest(prepared.original),digest(prepared.prepared),info.width,info.height,
+          framing.cropX,framing.cropY,framing.zoom,JSON.stringify(prepared.processing),userId,now);
+      });
+    } catch (error) { removeFiles(files); throw error; }
+    return getCredentialState(studentId);
+  });
+  photoProcessing = work.catch(() => undefined);
+  return work.finally(() => { queuedPhotos--; });
+}
+export function rejectCredentialPhoto(studentId: number, id: string, note: unknown, userId: number) {
+  const reason = cleanText(note,500);
+  if (reason.length < 5) throw new ApiError(400, "Indica al alumno qué debe corregir en su fotografía.");
+  transaction(() => {
+    if (photoSubmission(studentId,id).status !== "pending") throw new ApiError(409, "La foto ya fue revisada o reemplazada. Actualiza los datos.");
+    run("UPDATE credential_photo_submissions SET status='rejected',reviewed_at=?,reviewed_by=?,review_note=? WHERE id=?",new Date().toISOString(),userId,reason,id);
+  });
+  return getCredentialState(studentId);
+}
+export function approveCredentialPhoto(studentId: number, id: string, body: any, userId: number) {
+  if (body.requirementsAccepted !== true) throw new ApiError(400, "Confirma que revisaste el fondo blanco, el uniforme y el rostro centrado.");
+  const row = photoSubmission(studentId,id);
+  if (row.status !== "pending") throw new ApiError(409, "La foto ya fue revisada o reemplazada. Actualiza los datos.");
+  if (body.variant !== "original" && body.variant !== "prepared") throw new ApiError(400, "Selecciona la foto original o la versión con fondo aclarado.");
+  return activateCredential(studentId,body,userId,{row,variant:body.variant});
+}
+
+export function searchCredentialStudents(search: string, page: number, pendingOnly = false) {
   const term = `%${search}%`, limit = 30;
-  const where = "(st.student_number LIKE ? OR spanish_sort(TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name,''))) LIKE spanish_sort(?))";
+  const where = "(st.student_number LIKE ? OR spanish_sort(TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name,''))) LIKE spanish_sort(?))"
+    + (pendingOnly ? " AND EXISTS(SELECT 1 FROM credential_photo_submissions ps WHERE ps.student_id=st.id AND ps.status='pending')" : "");
   const count = get<{total:number}>(`SELECT COUNT(*) AS total FROM students st WHERE ${where}`, term, term)!.total;
   const records = all(`SELECT st.id,st.student_number,TRIM(st.first_name||' '||st.last_name||' '||COALESCE(st.second_last_name,'')) AS name,st.is_active,
-    CASE WHEN EXISTS(SELECT 1 FROM student_credentials c WHERE c.student_id=st.id) THEN 1 ELSE 0 END AS has_photo
+    CASE WHEN EXISTS(SELECT 1 FROM student_credentials c WHERE c.student_id=st.id) THEN 1 ELSE 0 END AS has_photo,
+    CASE WHEN EXISTS(SELECT 1 FROM credential_photo_submissions ps WHERE ps.student_id=st.id AND ps.status='pending') THEN 1 ELSE 0 END AS pending_photo
     FROM students st WHERE ${where} ORDER BY st.is_active DESC,spanish_sort(st.last_name),spanish_sort(st.first_name),st.id LIMIT ? OFFSET ?`, term, term, limit, (page - 1) * limit);
-  return { records, page, pages: Math.ceil(count / limit), total: count };
+  return { records, page, pages: Math.ceil(count / limit), total: count,
+    pending_total: get<{total:number}>("SELECT COUNT(*) AS total FROM credential_photo_submissions WHERE status='pending'")!.total };
 }

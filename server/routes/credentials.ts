@@ -7,6 +7,7 @@ import { get } from "../db.js";
 import { activateCredential, approvedCredential, approvedCredentialPdf, credentialFile, credentialImageData, credentialIssueByToken, credentialIssueStatus,
   credentialTemplate, deactivateCredential, getCredentialState, saveCredentialFraming, saveCredentialPhoto,
   saveCredentialSignature, saveCredentialTemplate, searchCredentialStudents, validateCredentialFraming, verifyCredential } from "../services/credentials.js";
+import { approveCredentialPhoto, photoSubmissionImage, rejectCredentialPhoto, submitCredentialPhoto } from "../services/credentials.js";
 import { buildCredentialPdf } from "../services/credential-pdf.js";
 import type { CredentialSnapshot } from "../../shared/credentials.js";
 
@@ -60,7 +61,20 @@ credentialsRouter.get("/template/signature", async (_req, res) => {
   if (!file) throw new ApiError(404, "No hay firma digital configurada.");
   privateResponse(res); res.json({ dataUrl: await credentialImageData(file) });
 });
-credentialsRouter.get("/students", (req, res) => res.json(searchCredentialStudents(cleanText(req.query.search, 120), Math.min(100000, Math.max(1, Math.trunc(Number(req.query.page)) || 1)))));
+credentialsRouter.get("/students", (req, res) => res.json(searchCredentialStudents(cleanText(req.query.search, 120), Math.min(100000, Math.max(1, Math.trunc(Number(req.query.page)) || 1)), req.query.pendingPhotos === "1")));
+credentialsRouter.get("/students/:id/submissions/:submissionId/photo", async (req, res) => {
+  privateResponse(res); res.json({ dataUrl: await photoSubmissionImage(asId(req.params.id,"Alumno"),String(req.params.submissionId),req.query.variant) });
+});
+credentialsRouter.post("/students/:id/submissions/:submissionId/approve", async (req: AuthenticatedRequest,res) => {
+  const id=asId(req.params.id,"Alumno"),state=await approveCredentialPhoto(id,String(req.params.submissionId),req.body,req.user!.id);
+  logActivity(req,"approve-student-photo","credential_photo_submissions",String(req.params.submissionId),{studentId:id,folio:state.issue?.folio});
+  privateResponse(res);res.json(state);
+});
+credentialsRouter.post("/students/:id/submissions/:submissionId/reject", (req: AuthenticatedRequest,res) => {
+  const id=asId(req.params.id,"Alumno"),state=rejectCredentialPhoto(id,String(req.params.submissionId),req.body.reason,req.user!.id);
+  logActivity(req,"reject-student-photo","credential_photo_submissions",String(req.params.submissionId),{studentId:id});
+  privateResponse(res);res.json(state);
+});
 credentialsRouter.get("/students/:id", (req, res) => { privateResponse(res); res.json(getCredentialState(asId(req.params.id, "Alumno"))); });
 credentialsRouter.post("/students/:id/photo", imageUpload("photo"), async (req: AuthenticatedRequest, res) => {
   const id = asId(req.params.id, "Alumno"), state = await saveCredentialPhoto(id, req.file!.buffer, req.body.revision, req.user!.id);
@@ -97,6 +111,17 @@ credentialsRouter.get("/students/:id/pdf", (req, res) => sendApprovedPdf(res, as
 
 portalCredentialRouter.use(requirePermission("portal.view"));
 portalCredentialRouter.get("/credential", (req: AuthenticatedRequest, res) => { privateResponse(res); res.json(getCredentialState(portalStudent(req))); });
+const studentPhotoLimit = rateLimit({windowMs:15*60*1000,limit:12,standardHeaders:"draft-7",legacyHeaders:false,
+  keyGenerator:req=>`student:${(req as AuthenticatedRequest).user?.studentId || (req as AuthenticatedRequest).user?.id}`,
+  message:{message:"Has enviado varias fotografías. Espera unos minutos antes de volver a intentarlo."}});
+portalCredentialRouter.post("/credential/photo-submission", studentPhotoLimit, imageUpload("photo"), async (req: AuthenticatedRequest,res) => {
+  const id=portalStudent(req),state=await submitCredentialPhoto(id,req.file!.buffer,req.body,req.user!.id);
+  logActivity(req,"submit-credential-photo","credential_photo_submissions",state.submission!.id,{studentId:id});
+  privateResponse(res);res.json(state);
+});
+portalCredentialRouter.get("/credential/photo-submission/photo", async (req: AuthenticatedRequest,res) => {
+  privateResponse(res);res.json({dataUrl:await photoSubmissionImage(portalStudent(req),undefined,req.query.variant)});
+});
 portalCredentialRouter.get("/credential/photo", async (req: AuthenticatedRequest, res) => {
   const issue = approvedCredential(portalStudent(req)); privateResponse(res); res.json({ dataUrl: await credentialImageData(issue.photo_file) });
 });
