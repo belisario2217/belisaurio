@@ -7,7 +7,9 @@ import { Worker } from "node:worker_threads";
 import request from "supertest";
 import sharp from "sharp";
 import PDFDocument from "pdfkit";
+import SVGtoPDF from "svg-to-pdfkit";
 import { credentialSvg, fitCredentialText } from "../shared/credential-artwork.js";
+import { credentialDimensions, type CredentialSnapshot } from "../shared/credentials.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "ifop-credentials-"));
 process.env.DATABASE_PATH = path.join(directory, "school.db");
@@ -52,6 +54,22 @@ async function pdfText(buffer: Buffer) {
     expect(result.error).toBeUndefined();
     return result.pages.map((page: any) => page.matrix.flat().join(" ").replace(/\s+/g, " ")) as string[];
   } finally { await worker.terminate(); }
+}
+
+async function legacyMaskedPdf(snapshot: CredentialSnapshot) {
+  const doc = new PDFDocument({ autoFirstPage: false }), chunks: Buffer[] = [];
+  const completed = new Promise<Buffer>((resolve, reject) => {
+    doc.on("data", chunk => chunks.push(Buffer.from(chunk))); doc.once("error", reject); doc.once("end", () => resolve(Buffer.concat(chunks)));
+  });
+  const size = credentialDimensions(snapshot.template.size), width = size.width * 72 / 25.4, height = size.height * 72 / 25.4;
+  const logo = `data:image/jpeg;base64,${fs.readFileSync("public/assets/campus-frontera.jpg").toString("base64")}`;
+  const photo = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  const measure = (text: string, size: number, bold: boolean) => doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).widthOfString(text);
+  for (const side of ["front", "back"] as const) {
+    doc.addPage({ size: [width, height], margin: 0 });
+    SVGtoPDF(doc as unknown as typeof PDFDocument, credentialSvg(snapshot, side, { logo, photo }, measure), 0, 0, { width, height, assumePt: true });
+  }
+  doc.end(); return completed;
 }
 
 describe("Student credentials", () => {
@@ -119,6 +137,8 @@ describe("Student credentials", () => {
     const own = await request(app).get("/api/portal/credential.pdf").set("Authorization", f.auth()).buffer(true).parse(binary).expect(200);
     expect(staff.body).toEqual(own.body); expect(staff.body).toEqual(fs.readFileSync(credentialFile(issue.card_file)));
     const raw = staff.body.toString("latin1"); expect(raw).toContain(issue.verification_url);
+    expect(raw.startsWith("%PDF-1.7")).toBe(true);
+    expect(raw).not.toContain("/Luminosity");
     expect(raw).toContain("/Width 1200"); expect(raw).toContain("/Height 1600"); expect(staff.body.includes(jpeg)).toBe(true);
     const pages = await pdfText(staff.body); expect(pages).toHaveLength(2);
     expect(pages[0]).toContain(result.body.student.name.toLocaleUpperCase("es-MX")); expect(pages[0]).toContain(result.body.student.number);
@@ -130,6 +150,61 @@ describe("Student credentials", () => {
     expect(() => run("UPDATE credential_issues SET snapshot_json='{}' WHERE id=?", issue.id)).toThrow(/inmutable/);
     await request(app).get(verified.body.photoUrl).expect(200);
   }, 15_000);
+
+  it("repairs an already active PDF on download without changing its approved data, QR, dates or original archive", async () => {
+    const f = fixture(); await photo(f.student); await activate(f.student);
+    const previous = latestCredentialIssue(f.student)!, snapshot = JSON.parse(previous.snapshot_json) as CredentialSnapshot;
+    const id = crypto.randomUUID(), token = crypto.randomBytes(24).toString("hex"), folio = `CEST-LEGACY-${sequence}`;
+    const verificationUrl = `https://escuela.example.test/verificar-credencial/${token}`;
+    snapshot.folio = folio;
+    const legacy = await legacyMaskedPdf(snapshot), json = JSON.stringify(snapshot);
+    expect(legacy.toString("latin1")).toContain("/Luminosity");
+    const card = `issues/${id}-card.pdf`, print = `issues/${id}-print.pdf`;
+    fs.writeFileSync(credentialFile(card), legacy); fs.writeFileSync(credentialFile(print), legacy);
+    run("UPDATE credential_issues SET revoked_at=? WHERE id=?", new Date().toISOString(), previous.id);
+    run(`INSERT INTO credential_issues(id,token,folio,student_id,photo_file,card_file,print_file,snapshot_json,snapshot_hash,verification_url,issued_by,issued_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, token, folio, f.student, previous.photo_file, card, print, json, hash(Buffer.from(json)), verificationUrl, admin, previous.issued_at);
+    const before = getCredentialState(f.student);
+    const downloaded = await Promise.all(Array.from({ length: 3 }, () => adminGet(`/students/${f.student}/pdf`).buffer(true).parse(binary).expect(200)));
+    for (const response of downloaded) {
+      expect(response.body.toString("latin1").startsWith("%PDF-1.7")).toBe(true);
+      expect(response.body.toString("latin1")).not.toContain("/Luminosity");
+      expect(response.body.toString("latin1")).toContain(verificationUrl);
+      expect(response.body.includes(jpeg)).toBe(true);
+      expect(response.body).toEqual(downloaded[0].body);
+    }
+    const own = await request(app).get("/api/portal/credential.pdf").set("Authorization", f.auth()).buffer(true).parse(binary).expect(200);
+    expect(own.body).toEqual(downloaded[0].body);
+    const letter = await adminGet(`/students/${f.student}/pdf?layout=letter`).buffer(true).parse(binary).expect(200);
+    expect(letter.body.toString("latin1")).not.toContain("/Luminosity");
+    expect(letter.body.toString("latin1")).toContain("/MediaBox [0 0 612 792]");
+    expect(fs.readFileSync(credentialFile(card))).toEqual(legacy);
+    expect(fs.readFileSync(credentialFile(print))).toEqual(legacy);
+    expect(latestCredentialIssue(f.student)).toMatchObject({ id, token, folio, card_file: card, print_file: print, snapshot_json: json });
+    expect(getCredentialState(f.student)).toEqual(before);
+    expect((await request(app).get(`/api/credentials/verify/${token}`)).body).toMatchObject({ status: "active", document: { folio, issuedAt: snapshot.issuedAt, validity: snapshot.validity } });
+    await post(f.student, "deactivate", { revision: before.revision }).expect(200);
+    await request(app).get("/api/portal/credential.pdf").set("Authorization", f.auth()).expect(403);
+  }, 15_000);
+
+  it("embeds a transparent PNG photograph and signature without SVG luminosity masks", async () => {
+    const f = fixture();
+    const portrait = await sharp({ create: { width: 1200, height: 1600, channels: 4, background: { r: 160, g: 180, b: 210, alpha: .6 } } }).png().toBuffer();
+    const signature = await sharp({ create: { width: 800, height: 200, channels: 4, background: { r: 20, g: 30, b: 60, alpha: .5 } } }).png().toBuffer();
+    const template = (await adminGet("/template")).body;
+    const saved = await request(app).post("/api/credentials/template/signature").set("Authorization", auth()).field("version", String(template.version)).attach("signature", signature, "firma.png").expect(200);
+    try {
+      await photo(f.student, portrait); await activate(f.student);
+      const pdf = await adminGet(`/students/${f.student}/pdf`).buffer(true).parse(binary).expect(200);
+      const raw = pdf.body.toString("latin1");
+      expect(raw.startsWith("%PDF-1.7")).toBe(true);
+      expect(raw).not.toContain("/Luminosity"); expect(raw).toContain("/SMask");
+      expect(raw).toContain("/Width 1200"); expect(raw).toContain("/Height 1600");
+      expect(raw).toContain("/Width 800"); expect(raw).toContain("/Height 200");
+    } finally {
+      await request(app).delete("/api/credentials/template/signature").set("Authorization", auth()).send({ version: saved.body.version }).expect(200);
+    }
+  });
 
   it("always resolves a portal download from its authenticated student, even with another student ID", async () => {
     const a = fixture(), b = fixture(); await photo(a.student); await photo(b.student); await activate(a.student); await activate(b.student);

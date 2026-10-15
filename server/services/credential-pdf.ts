@@ -3,10 +3,12 @@ import PDFDocument from "pdfkit";
 import SVGtoPDF from "svg-to-pdfkit";
 import sharp from "sharp";
 import QRCode from "qrcode";
-import { credentialSvg } from "../../shared/credential-artwork.js";
+import { credentialDraftSvg, credentialImageLayout, credentialSvg } from "../../shared/credential-artwork.js";
 import { credentialDimensions, type CredentialSnapshot } from "../../shared/credentials.js";
 import { institutionLogoFile } from "./institution-logo.js";
 import { credentialFile } from "./credentials.js";
+
+export const credentialPdfVersion = 2;
 
 async function originalImageData(file: string) {
   const buffer = fs.readFileSync(file), metadata = await sharp(buffer, { limitInputPixels: 40_000_000 }).metadata();
@@ -26,7 +28,7 @@ export async function buildCredentialPdf(snapshot: CredentialSnapshot, photoFile
   const qr = verificationUrl ? QRCode.create(verificationUrl, { errorCorrectionLevel: "M" }).modules : null;
   const dimensions = credentialDimensions(snapshot.template.size), mm = 72 / 25.4;
   const width = dimensions.width * mm, height = dimensions.height * mm;
-  const doc = new PDFDocument({ autoFirstPage: false, compress: true, info: {
+  const doc = new PDFDocument({ autoFirstPage: false, compress: true, pdfVersion: "1.7", info: {
     Title: `${draft ? "Vista previa" : "Credencial estudiantil"} - ${snapshot.student.name}`,
     Author: snapshot.template.institution, Subject: "Credencial de estudiante · frente y reverso"
   } });
@@ -36,11 +38,35 @@ export async function buildCredentialPdf(snapshot: CredentialSnapshot, photoFile
     doc.once("end", () => resolve(Buffer.concat(chunks)));
   });
   const measure = (text: string, size: number, bold: boolean) => doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).widthOfString(text);
-  const draw = (side: "front" | "back", x: number, y: number) => {
-    const svg = credentialSvg(snapshot, side, { logo, photo, signature, qr }, measure, draft);
+  const boxes = credentialImageLayout(snapshot);
+  const vector = (svg: string, x: number, y: number) => {
     // The upstream declaration expects a constructor; the actual API receives a PDFKit document.
     SVGtoPDF(doc as unknown as typeof PDFDocument, svg, x, y, { width, height, assumePt: true,
       fontCallback: (_family, bold) => bold ? "Helvetica-Bold" : "Helvetica" });
+  };
+  const draw = (side: "front" | "back", x: number, y: number) => {
+    // SVG clip-paths become luminosity masks, which can hide images in Apple's PDF viewer.
+    // Keep the vectors, but embed original image pixels with standard native PDF clipping.
+    vector(credentialSvg(snapshot, side, { logo, photo, signature, qr: draft ? null : qr }, measure, false, false), x, y);
+    doc.save().translate(x, y).scale(width / 1000);
+    if (logo) {
+      const { frame, image } = boxes.logo;
+      doc.save().rect(frame.x, frame.y, frame.width, frame.height).clip();
+      doc.image(logo, image.x, image.y, { fit: [image.width, image.height], align: "center", valign: "center" });
+      doc.restore();
+    }
+    if (side === "front" && photo) {
+      const { frame, image } = boxes.photo;
+      doc.save().circle(frame.x, frame.y, frame.radius).clip();
+      doc.image(photo, image.x, image.y, { width: image.width, height: image.height });
+      doc.restore();
+    }
+    if (side === "back" && signature) {
+      const box = boxes.signature;
+      doc.image(signature, box.x, box.y, { fit: [box.width, box.height], align: "center", valign: "center" });
+    }
+    doc.restore();
+    if (draft) vector(credentialDraftSvg(snapshot), x, y);
     if (verificationUrl && side === "front" && !draft) {
       const scale = width / 1000, viewHeight = dimensions.height / dimensions.width * 1000;
       doc.link(x + 447 * scale, y + (viewHeight - 475) * scale, 350 * scale, 350 * scale, verificationUrl);

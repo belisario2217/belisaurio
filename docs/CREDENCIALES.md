@@ -57,6 +57,14 @@ Cada activación archiva los dos PDF definitivos. Los cambios posteriores al dis
 afectan las próximas activaciones; no modifican credenciales ya aprobadas. El alumno
 descarga exactamente los mismos bytes que el administrativo y solo de su propia cuenta.
 
+El logo, la fotografía y la firma se incrustan directamente en PDF 1.7, con recortes
+nativos, para evitar que visores como el del iPhone los oculten al interpretar máscaras
+SVG de transparencia. Las descargas de emisiones anteriores reciben una copia de
+presentación compatible, creada a partir de sus datos y foto autorizados. Conserva el
+folio, QR, fecha, vigencia y aprobación originales, y no requiere otra activación. Los
+archivos originalmente archivados se conservan. Una credencial desactivada o vencida
+sigue sin poder descargarse.
+
 ## Operación y almacenamiento
 
 La migración `031_student_credentials.sql` añade tablas y permisos sin sustituir datos
