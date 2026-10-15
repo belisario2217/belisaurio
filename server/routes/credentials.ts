@@ -1,11 +1,10 @@
 import { Router, type Response } from "express";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
-import fs from "node:fs";
 import { requirePermission, logActivity, type AuthenticatedRequest } from "../auth.js";
 import { ApiError, asId, cleanText } from "../utils.js";
 import { get } from "../db.js";
-import { activateCredential, approvedCredential, credentialFile, credentialImageData, credentialIssueByToken, credentialIssueStatus,
+import { activateCredential, approvedCredential, approvedCredentialPdf, credentialFile, credentialImageData, credentialIssueByToken, credentialIssueStatus,
   credentialTemplate, deactivateCredential, getCredentialState, saveCredentialFraming, saveCredentialPhoto,
   saveCredentialSignature, saveCredentialTemplate, searchCredentialStudents, validateCredentialFraming, verifyCredential } from "../services/credentials.js";
 import { buildCredentialPdf } from "../services/credential-pdf.js";
@@ -29,12 +28,14 @@ function layout(value: unknown): "card" | "letter" {
   if (value === "letter") return "letter";
   throw new ApiError(400, "Selecciona credencial o impresión en hoja carta.");
 }
-function sendApprovedPdf(res: Response, studentId: number, format: unknown) {
+async function sendApprovedPdf(res: Response, studentId: number, format: unknown) {
   const issue = approvedCredential(studentId), mode = layout(format), snapshot = JSON.parse(issue.snapshot_json) as CredentialSnapshot;
   privateResponse(res);
+  const buffer = await approvedCredentialPdf(issue, mode);
+  if (approvedCredential(studentId).id !== issue.id) throw new ApiError(409, "La credencial se actualizó durante la descarga. Vuelve a descargar su versión vigente.");
   const number = snapshot.student.number.normalize("NFD").replace(/[^a-z0-9-]/gi, "") || String(studentId);
   res.type("pdf").attachment(`credencial-${number}${mode === "letter" ? "-carta" : ""}.pdf`)
-    .send(fs.readFileSync(credentialFile(mode === "letter" ? issue.print_file : issue.card_file)));
+    .send(buffer);
 }
 function portalStudent(req: AuthenticatedRequest) {
   if (!req.user?.studentId) throw new ApiError(403, "Tu cuenta debe estar vinculada a un alumno para consultar su credencial.");

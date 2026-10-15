@@ -8,7 +8,7 @@ import { ApiError, cleanText } from "../utils.js";
 import { publicAppUrl } from "./document-verification.js";
 import { validCalendarDate } from "./academic-calendar.js";
 import { defaultCredentialTemplate, type CredentialFraming, type CredentialSnapshot, type CredentialState, type CredentialStatus, type CredentialStudent, type CredentialTemplate, type CredentialValidity, type CredentialVerification } from "../../shared/credentials.js";
-import { buildCredentialPdf } from "./credential-pdf.js";
+import { buildCredentialPdf, credentialPdfVersion } from "./credential-pdf.js";
 
 const vault = path.join(path.dirname(databasePath), "credentials");
 type Profile = { student_id: number; photo_file: string; photo_width: number; photo_height: number; photo_hash: string; crop_x: number; crop_y: number; zoom: number; valid_until: string | null; revision: number };
@@ -227,7 +227,7 @@ export async function activateCredential(studentId: number, body: any, userId: n
   const snapshot: CredentialSnapshot = { student: state.student, template: state.template, framing, photo: state.photo, issuedAt, folio, validity: state.validity };
   const card = await buildCredentialPdf(snapshot, current.photo_file, verificationUrl, "card");
   const print = await buildCredentialPdf(snapshot, current.photo_file, verificationUrl, "letter");
-  const files = [`issues/${id}-card.pdf`, `issues/${id}-print.pdf`];
+  const files = [`issues/${id}-card-v${credentialPdfVersion}.pdf`, `issues/${id}-print-v${credentialPdfVersion}.pdf`];
   try {
     writeFile(files[0], card); writeFile(files[1], print);
     transaction(() => {
@@ -247,6 +247,29 @@ export function approvedCredential(studentId: number) {
   const issue = latestCredentialIssue(studentId);
   if (!issue || credentialIssueStatus(issue) !== "active") throw new ApiError(403, "Tu credencial todavía no está disponible. Control Escolar debe cargar tu foto y activar una credencial vigente.");
   return issue;
+}
+
+const compatiblePdfRenders = new Map<string, Promise<Buffer>>();
+/** Repair rendering of old approved PDFs without reissuing identity, QR or validity. */
+export async function approvedCredentialPdf(issue: CredentialIssueRow, layout: "card" | "letter") {
+  const archived = layout === "letter" ? issue.print_file : issue.card_file;
+  if (archived.endsWith(`-v${credentialPdfVersion}.pdf`)) return fs.readFileSync(credentialFile(archived));
+  const filename = `issues/${issue.id}-${layout === "letter" ? "print" : "card"}-v${credentialPdfVersion}.pdf`;
+  const pending = compatiblePdfRenders.get(filename);
+  if (pending) return pending;
+  if (fs.existsSync(credentialFile(filename))) return fs.readFileSync(credentialFile(filename));
+  const rendering = (async () => {
+    const snapshot = JSON.parse(issue.snapshot_json) as CredentialSnapshot;
+    const buffer = await buildCredentialPdf(snapshot, issue.photo_file, issue.verification_url, layout);
+    const temporary = `issues/${issue.id}-${crypto.randomUUID()}-render.pdf`;
+    try {
+      writeFile(temporary, buffer);
+      fs.renameSync(credentialFile(temporary), credentialFile(filename));
+    } finally { removeFiles([temporary]); }
+    return buffer;
+  })();
+  compatiblePdfRenders.set(filename, rendering);
+  try { return await rendering; } finally { compatiblePdfRenders.delete(filename); }
 }
 export function credentialPhotoFile(studentId: number, approved = false) {
   const file = approved ? approvedCredential(studentId).photo_file : profile(studentId)?.photo_file;
