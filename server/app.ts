@@ -24,6 +24,7 @@ import { payrollRouter } from "./routes/payroll.js";
 import { improvementsRouter } from "./routes/improvements.js";
 import { importAssistantRouter } from "./routes/import-assistant.js";
 import { attendanceRouter } from "./routes/attendance.js";
+import { documentVerificationRouter } from "./routes/document-verification.js";
 import { ensureAllStudentAccounts } from "./services/student-account.js";
 import { defaultInstitutionLogoUrl, institutionLogoPublicUrl } from "./services/institution-logo.js";
 
@@ -54,6 +55,7 @@ app.get("/api/branding", (_req, res) => {
   });
 });
 app.use("/api/auth", authRouter);
+app.use("/api/documents", documentVerificationRouter);
 app.use("/api/catalogs", authenticate, catalogsRouter);
 app.use("/api/students", authenticate, studentsRouter);
 app.use("/api/grades", authenticate, gradesRouter);

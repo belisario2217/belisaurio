@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import {
   Award, Check, ClipboardCheck, FileSpreadsheet, FileText, GraduationCap, ListFilter, Printer,
-  Save, Sheet, SlidersHorizontal, Trash2, UserRoundX, UsersRound
+  Save, Sheet, ShieldCheck, SlidersHorizontal, Trash2, UserRoundX, UsersRound
 } from "lucide-react";
 import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Button, Field, Select } from "../components/Ui";
 import { Modal } from "../components/Modal";
+import type { OfficialDocumentSnapshot } from "../../shared/official-document";
 
 type Option = { id: number; name: string; active_cycle_id?: number; plan_id?: number };
 type Plan = { id: number; code: string; name: string; is_active: number };
 type PlanSubject = { subject_id: number; code: string; name: string; recommended_period: number };
+type IssuedDocumentRow = { id: string; folio: string; document_type: string; issued_at: string; verification_url: string; revoked_at: string | null };
 type CurricularSubject = {
   id: number;
   semester_number: number;
@@ -65,7 +67,12 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   const [drafts, setDrafts] = useState<Record<number, CurricularDraft>>({});
   const [groupId, setGroupId] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [periodId, setPeriodId] = useState("");
+  const [documentBusy, setDocumentBusy] = useState(false);
+  const [issuedDocuments, setIssuedDocuments] = useState<IssuedDocumentRow[]>([]);
+  const [academicContext, setAcademicContext] = useState<OfficialDocumentSnapshot["student"] | null>(null);
+  const [contextError, setContextError] = useState("");
+  const [revoking, setRevoking] = useState<IssuedDocumentRow | null>(null);
+  const [revocationReason, setRevocationReason] = useState("");
   const [planId, setPlanId] = useState("");
   const [cycleId, setCycleId] = useState("");
   const [semester, setSemester] = useState("1");
@@ -154,7 +161,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   }
 
   useEffect(() => {
-    Promise.all(["groups", "periods", "cycles"].map(async (type) => {
+    Promise.all(["groups", "cycles"].map(async (type) => {
       const result = await api<{ records: any[] }>(`/catalogs/${type}`);
       return [type, result.records.filter((item) => item.is_active).map((item) => ({
         id: item.id,
@@ -168,6 +175,18 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
     );
     api<Plan[]>("/plans").then((records) => setPlans(records.filter((plan) => plan.is_active))).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    setAcademicContext(null); setContextError(""); setIssuedDocuments([]);
+    if (view !== "documents" || !studentId) return;
+    const controller = new AbortController();
+    api<{student: OfficialDocumentSnapshot["student"]}>(`/reports/academic-context?studentId=${studentId}`, { signal: controller.signal })
+      .then(result => setAcademicContext(result.student))
+      .catch(error => { if (!controller.signal.aborted) setContextError(error.message); });
+    api<IssuedDocumentRow[]>(`/reports/issued-documents?studentId=${studentId}`, { signal: controller.signal })
+      .then(setIssuedDocuments).catch(error => { if (!controller.signal.aborted) toast.error(error.message); });
+    return () => controller.abort();
+  }, [view, studentId]);
 
   useEffect(() => {
     if (!planId) {
@@ -193,24 +212,45 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
     return `/reports/data/${type}?${query}`;
   }
 
+  async function emitDocument(path: string) {
+    setDocumentBusy(true);
+    try {
+      await openDocument(path);
+      if (studentId) setIssuedDocuments(await api<IssuedDocumentRow[]>(`/reports/issued-documents?studentId=${studentId}`));
+    } catch (error) { toast.error(error instanceof Error ? error.message : "No fue posible emitir el documento."); }
+    finally { setDocumentBusy(false); }
+  }
+
   function reportCard(mode: "student" | "group") {
     const query = new URLSearchParams();
     if (mode === "student" && studentId) query.set("studentId", studentId);
     if (mode === "group" && groupId) query.set("groupId", groupId);
-    if (periodId) query.set("periodId", periodId);
     if (!query.has(mode === "student" ? "studentId" : "groupId")) {
       toast.error(`Selecciona un ${mode === "student" ? "alumno" : "grupo"}.`);
       return;
     }
-    openDocument(`/reports/report-card.pdf?${query}`);
+    emitDocument(`/reports/report-card.pdf?${query}`);
   }
 
-  function studyCertificate() {
+  function studentDocument(type: "study-certificate" | "academic-history") {
     if (!studentId) {
       toast.error("Selecciona un alumno.");
       return;
     }
-    openDocument(`/reports/study-certificate.pdf?studentId=${studentId}`);
+    emitDocument(`/reports/${type}.pdf?studentId=${studentId}`);
+  }
+
+  async function revokeDocument(event: React.FormEvent) {
+    event.preventDefault();
+    if (!revoking) return;
+    setDocumentBusy(true);
+    try {
+      await api(`/reports/issued-documents/${revoking.id}/revoke`, { method: "POST", body: { reason: revocationReason } });
+      setIssuedDocuments(await api<IssuedDocumentRow[]>(`/reports/issued-documents?studentId=${studentId}`));
+      setRevoking(null); setRevocationReason("");
+      toast.success("Documento revocado. Su QR mostrará que ya no es válido.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "No fue posible revocar el documento."); }
+    finally { setDocumentBusy(false); }
   }
 
   async function assignSemesterSubjects() {
@@ -347,18 +387,30 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
 
   return (
     <div className="page-stack">
-      {view === "documents" && <section className="report-card-builder">
+      {view === "documents" && <><section className="report-card-builder">
         <div className="report-builder-intro">
           <div className="report-builder-icon"><GraduationCap size={28} /></div>
-          <div><span>Documento oficial</span><h2>Boletas de calificaciones</h2><p>Generacion individual o masiva con identidad institucional.</p></div>
+          <div><span>Control Escolar</span><h2>Documentos escolares</h2><p>Emisión institucional con firma, sello y QR de validación.</p></div>
         </div>
         <div className="report-builder-controls">
           <Field label="Alumno"><Select options={options.students ?? []} value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="Seleccionar alumno" /></Field>
           <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Seleccionar grupo" /></Field>
-          <Field label="Periodo"><Select options={options.periods ?? []} value={periodId} onChange={(event) => setPeriodId(event.target.value)} placeholder="Todos los periodos" /></Field>
-          <div className="builder-buttons"><Button variant="secondary" icon={<Printer size={17} />} onClick={() => reportCard("student")}>Boleta individual</Button><Button variant="secondary" icon={<FileText size={17} />} onClick={studyCertificate}>Constancia de estudios</Button><Button icon={<Sheet size={17} />} onClick={() => reportCard("group")}>Boletas por grupo</Button></div>
+          <Button variant="secondary" icon={<Sheet size={17} />} busy={documentBusy} onClick={() => reportCard("group")}>Boletas por grupo</Button>
         </div>
+        {academicContext && <p className="document-context"><strong>{academicContext.name}</strong><span>{academicContext.semesterName} · Ciclo escolar {academicContext.cycle} · Grupo {academicContext.group}</span></p>}
+        {contextError && <p className="document-context" role="alert">{contextError}</p>}
+        <div className="official-document-options">
+          <article><Printer size={24} /><h3>Boleta de calificaciones</h3><p>Solo las asignaturas del semestre actual. Incluye parciales, calificación final y espacios para firma.</p><Button variant="secondary" busy={documentBusy} onClick={() => reportCard("student")}>Emitir boleta</Button></article>
+          <article><GraduationCap size={24} /><h3>Historial académico</h3><p>Asignaturas cursadas de semestres anteriores y las del semestre actual, sin materias futuras.</p><Button variant="secondary" busy={documentBusy} onClick={() => studentDocument("academic-history")}>Emitir historial</Button></article>
+          <article><FileText size={24} /><h3>Constancia de estudios</h3><p>Inscripción vigente, semestre actual y calendario del ciclo escolar: inicio, vacaciones y fin.</p><Button variant="secondary" busy={documentBusy} onClick={() => studentDocument("study-certificate")}>Emitir constancia</Button></article>
+        </div>
+      </section>
+      {studentId && <section className="table-section"><header className="section-heading"><div><span>Validación institucional</span><h2>Documentos emitidos</h2><p>El QR conserva los datos de cada emisión. Revoca un documento cuando deba sustituirse.</p></div></header>
+        <div className="table-wrap"><table><thead><tr><th>Documento / folio</th><th>Emisión</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{issuedDocuments.map(document => <tr key={document.id}><td><strong>{{ report_card: "Boleta", academic_history: "Historial académico", study_certificate: "Constancia", account_statement: "Estado de cuenta" }[document.document_type] || document.document_type}</strong><span className="table-sub">{document.folio}</span></td><td>{new Date(document.issued_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</td><td>{document.revoked_at ? "Revocado" : "Vigente"}</td><td><div className="inline-actions"><a className="button button-secondary" href={document.verification_url} target="_blank" rel="noreferrer"><ShieldCheck size={16} /> Verificar</a>{!document.revoked_at && <Button variant="ghost" onClick={() => { setRevoking(document); setRevocationReason(""); }}>Revocar</Button>}</div></td></tr>)}</tbody></table></div>
+        {!issuedDocuments.length && <p className="empty-calendar-copy">Aún no hay documentos emitidos para este alumno.</p>}
       </section>}
+      <Modal open={!!revoking} title="Revocar documento" onClose={() => setRevoking(null)} size="small"><form onSubmit={revokeDocument}><p>El folio {revoking?.folio} quedará sin validez en la consulta del QR.</p><Field label="Motivo" required><textarea value={revocationReason} onChange={event => setRevocationReason(event.target.value)} maxLength={300} required /></Field><div className="modal-actions"><Button type="button" variant="secondary" onClick={() => setRevoking(null)}>Cancelar</Button><Button type="submit" variant="danger" busy={documentBusy}>Revocar documento</Button></div></form></Modal>
+      </>}
 
       {view === "reports" && <><section className="curricular-admin">
         <div className="section-heading standalone">

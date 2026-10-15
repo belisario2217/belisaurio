@@ -60,9 +60,8 @@ periodo, rango y estado de captura antes de permitir la confirmación.
 En **Cobros**, busca y selecciona al alumno para consultar sus pagos y saldo. En el
 encabezado de la cuenta, **PDF carta** abre un estado de cuenta institucional listo para
 imprimir y **Excel** descarga el mismo formato con una segunda pestaña que conserva el
-historial completo de movimientos. Cuando existen más de 12 pagos, tanto el PDF como la
-pestaña **Estado de Cuenta** del Excel agregan automáticamente las hojas carta necesarias;
-cada hoja repite encabezado, datos del alumno, totales, firma y código de verificación.
+historial completo de movimientos. El PDF pagina cada 10 pagos y la pestaña **Estado de Cuenta**
+de Excel cada 12. Cada hoja repite encabezado, datos del alumno, totales, firma, folio y QR.
 
 Al registrar o editar un pago, captura el **NÚMERO DE FOLIO FÍSICO** impreso en el recibo,
 usando cuatro dígitos del **0001 al 1000**. El sistema conserva por separado su identificador
@@ -121,8 +120,11 @@ código de verificación SHA-256.
 
 ## Boletas y reportes
 
-En **Reportes** selecciona alumno o grupo para generar boletas PDF. El navegador abre el
-documento para descargarlo o imprimirlo.
+En **Documentos** selecciona al alumno para generar una boleta del semestre actual, un historial
+acumulado hasta ese semestre o una constancia con las fechas del ciclo activo. La opción de
+grupo genera una boleta por alumno. Todos incluyen folio y QR para cotejar los datos sin sesión.
+Consulta [Documentos oficiales y validación por QR](DOCUMENTOS-OFICIALES.md) para configurar las
+fechas del ciclo, el dominio público y la revocación de emisiones.
 
 Los formatos operativos incluyen:
 

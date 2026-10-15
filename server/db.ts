@@ -171,7 +171,7 @@ export function seed() {
     run("INSERT INTO shifts(name, start_time, end_time) VALUES ('Vespertino', '14:00', '20:00')");
     const morning = get<{ id: number }>("SELECT id FROM shifts WHERE name = 'Matutino'")!;
 
-    run("INSERT INTO school_cycles(name, start_date, end_date) VALUES ('2026B - 2027A', '2026-08-10', '2027-07-31')");
+    run("INSERT INTO school_cycles(name, start_date, end_date) VALUES ('2026B - 2027A', '2026-08-10', '2027-01-29')");
     const cycle = get<{ id: number }>("SELECT id FROM school_cycles LIMIT 1")!;
     run("INSERT INTO academic_periods(cycle_id, name, sequence, start_date, end_date) VALUES (?, 'Primer parcial', 1, '2026-08-10', '2026-10-16')", cycle.id);
     run("INSERT INTO academic_periods(cycle_id, name, sequence, start_date, end_date) VALUES (?, 'Segundo parcial', 2, '2026-10-19', '2026-12-18')", cycle.id);
@@ -251,6 +251,26 @@ export function seed() {
       cycle.id,
       scale.id
     );
+    const certificateCycle = get<{ id: number }>("SELECT id FROM school_cycles WHERE name = '2026B - 2027A' ORDER BY id DESC LIMIT 1");
+    if (certificateCycle) {
+      [
+        ["class_start", "Inicio de actividades del periodo", "2026-08-10", "2026-08-10", "Fecha inicial usada en constancias de estudios.", 1],
+        ["vacation", "Periodo vacacional de invierno", "2026-12-18", "2027-01-04", "Periodo vacacional indicado en las constancias institucionales.", 0],
+        ["cycle_end", "Fin de actividades del periodo", "2027-01-29", "2027-01-29", "Fecha final usada en constancias de estudios.", 0]
+      ].forEach(([eventType, title, startDate, endDate, description, autoStartSubjects]) => {
+        run(
+          `INSERT INTO academic_calendar_events(school_cycle_id, event_type, title, start_date, end_date, description, auto_start_subjects)
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM academic_calendar_events
+             WHERE school_cycle_id = ? AND event_type = ? AND is_active = 1
+           )`,
+          certificateCycle.id, String(eventType), String(title), String(startDate), String(endDate), String(description), Number(autoStartSubjects),
+          certificateCycle.id, String(eventType)
+        );
+      });
+    }
+
     run("INSERT INTO report_templates(name, type, header_text, footer_text, is_default) VALUES ('Boleta institucional', 'report_card', 'Universidad IFOP', 'Formando conocimiento con propósito', 1)");
   });
 }
@@ -359,26 +379,6 @@ function ensureEnhancementData() {
        WHERE r.name IN ('Administrador', 'Coordinador académico', 'Coordinador acadÃ©mico', 'Docente')
        AND p.code = 'attendance.manage'`
     );
-
-    const certificateCycle = get<{ id: number }>("SELECT id FROM school_cycles WHERE name = '2026B - 2027A' ORDER BY id DESC LIMIT 1");
-    if (certificateCycle) {
-      [
-        ["class_start", "Inicio de actividades del periodo", "2026-08-10", "2026-08-10", "Fecha inicial usada en constancias de estudios.", 1],
-        ["vacation", "Periodo vacacional de invierno", "2026-12-18", "2027-01-04", "Periodo vacacional indicado en las constancias institucionales.", 0],
-        ["cycle_end", "Fin de actividades del periodo", "2027-01-29", "2027-01-29", "Fecha final usada en constancias de estudios.", 0]
-      ].forEach(([eventType, title, startDate, endDate, description, autoStartSubjects]) => {
-        run(
-          `INSERT INTO academic_calendar_events(school_cycle_id, event_type, title, start_date, end_date, description, auto_start_subjects)
-           SELECT ?, ?, ?, ?, ?, ?, ?
-           WHERE NOT EXISTS (
-             SELECT 1 FROM academic_calendar_events
-             WHERE school_cycle_id = ? AND event_type = ? AND is_active = 1
-           )`,
-          certificateCycle.id, String(eventType), String(title), String(startDate), String(endDate), String(description), Number(autoStartSubjects),
-          certificateCycle.id, String(eventType)
-        );
-      });
-    }
 
     const student = get<{ id: number; full_name: string }>(
       `SELECT id, TRIM(first_name || ' ' || last_name || ' ' || COALESCE(second_last_name, '')) AS full_name

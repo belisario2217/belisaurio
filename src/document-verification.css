@@ -1,0 +1,51 @@
+.verification-page { min-height: 100vh; background: #f2f5fa; border-top: 7px solid #172951; }
+.verification-brand { display: flex; align-items: center; gap: 18px; max-width: 1020px; margin: auto; padding: 25px 30px; }
+.verification-brand img { width: 66px; height: 66px; object-fit: contain; }
+.verification-brand div { display: grid; gap: 5px; }
+.verification-brand strong { font-size: 21px; color: #172951; }
+.verification-brand span { color: #607086; font-size: 13px; }
+.verification-brand a { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; text-decoration: none; }
+.verification-content { max-width: 960px; padding: 8px 20px 40px; margin: auto; }
+.verification-status { display: flex; gap: 20px; padding: 28px; border-radius: 12px; border: 1px solid; }
+.verification-status > svg { flex-shrink: 0; }
+.verification-status span, .verification-document-title span { font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.verification-status h1 { font-size: 25px; margin: 7px 0 10px; }
+.verification-status p { margin: 0; line-height: 1.7; font-size: 14px; }
+.verification-status button { margin-top: 16px; }
+.verification-valid { color: #155642; background: #eaf6f0; border-color: #badbcd; }
+.verification-invalid { color: #8e2838; background: #fff0f2; border-color: #efc8d0; }
+.verification-document { margin-top: 22px; background: white; border: 1px solid #dce3ee; border-radius: 12px; padding: 32px; box-shadow: 0 10px 30px #17295105; }
+.verification-document-title { display: flex; gap: 14px; align-items: center; color: #172951; padding-bottom: 23px; border-bottom: 1px solid #e3e8ef; }
+.verification-document-title span { color: #607086; }
+.verification-document h2 { margin: 5px 0 0; font-size: 22px; }
+.verification-document h3 { margin: 28px 0 16px; font-size: 16px; }
+.verification-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 30px; margin: 26px 0; }
+.verification-fields dt { font-size: 11px; color: #607086; margin-bottom: 7px; }
+.verification-fields dd { margin: 0; font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.verification-wide { grid-column: 1 / -1; }
+.verification-wide dd { font-size: 18px; }
+.verification-folio { font-family: ui-monospace, monospace; }
+.verification-instructions { font-size: 12px; background: #f3f6fa; padding: 16px; line-height: 1.7; color: #607086; border-left: 3px solid #b5c5df; }
+.verification-calendar p { font-size: 13px; line-height: 1.8; }
+.verification-document td { font-size: 12px; }
+.verification-document td strong { display: block; font-weight: 500; }
+.verification-total { font-size: 18px; font-weight: 700; text-align: right; margin-top: 22px; color: #172951; }
+.verification-document footer { margin-top: 30px; padding-top: 22px; border-top: 1px solid #e3e8ef; display: grid; gap: 7px; }
+.verification-document footer strong { font-size: 13px; }
+.verification-document footer span, .verification-document footer small { font-size: 11px; color: #607086; }
+.verification-document footer small { margin-top: 14px; }
+.verification-document footer code { overflow-wrap: anywhere; font-size: 10px; color: #607086; }
+.verification-footer { text-align: center; color: #607086; font-size: 11px; line-height: 1.9; margin-top: 25px; }
+.verification-loading { display: grid; justify-items: center; padding: 70px 20px; color: #607086; text-align: center; }
+.verification-loading h1 { font-size: 21px; }
+@media (max-width: 600px) {
+  .verification-brand { padding: 20px; gap: 12px; flex-wrap: wrap; }
+  .verification-brand strong { font-size: 17px; }
+  .verification-brand img { width: 48px; height: 48px; }
+  .verification-brand a { margin-left: 60px; }
+  .verification-status { padding: 21px; gap: 12px; }
+  .verification-status > svg { width: 28px; }
+  .verification-status h1 { font-size: 21px; }
+  .verification-document { padding: 22px 17px; }
+  .verification-fields { grid-template-columns: 1fr; gap: 20px; }
+}

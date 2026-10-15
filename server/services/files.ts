@@ -38,8 +38,8 @@ export async function sendWorkbook(res: Response, filename: string, sheetName: s
 
 export function createPdf(res: Response, filename: string, options: PDFKit.PDFDocumentOptions = {}, letterhead = true) {
   const doc = new PDFDocument({ size: "LETTER", margin: 42, ...options });
-  if(letterhead){doc.info.Author=documentBranding().name;doc.info.Title=filename.replace(/\.pdf$/i,"").replace(/[-_]/g," ");doc.page.margins.top=134;doc.page.margins.bottom=Math.max(50,doc.page.margins.bottom);doc.y=134;let page=0;
-    const header=()=>{doc.page.margins.top=134;doc.page.margins.bottom=Math.max(50,doc.page.margins.bottom);doc.y=134;pdfLetterhead(doc,++page);};
+  if(letterhead){doc.info.Author=documentBranding().name;doc.info.Title=filename.replace(/\.pdf$/i,"").replace(/[-_]/g," ");doc.page.margins.top=134;doc.page.margins.bottom=Math.max(70,doc.page.margins.bottom);doc.y=134;let page=0;
+    const header=()=>{doc.page.margins.top=134;doc.page.margins.bottom=Math.max(70,doc.page.margins.bottom);doc.y=134;pdfLetterhead(doc,++page);};
     header();doc.on("pageAdded",header);
   }
   res.type("application/pdf").setHeader("Content-Disposition", `inline; filename="${filename}"`);
