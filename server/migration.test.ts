@@ -21,6 +21,13 @@ INSERT INTO students(id,student_number,first_name,last_name,status_id) VALUES(10
 INSERT INTO groups(id,name,program_id,shift_id,cycle_id,active_cycle_id,curricular_period_id) VALUES(100,'Grupo de prueba',100,100,100,100,100);
 INSERT INTO enrollments(id,student_id,program_id,shift_id,group_id,cycle_id) VALUES(100,100,100,100,100,100);`);
 legacy.exec("UPDATE sqlite_sequence SET seq=150 WHERE name='groups'");
+legacy.exec(`INSERT INTO programs(id,code,name) VALUES(101,'LEG-UNITEN','Licenciatura en Enfermería UNITEN'),(102,'LEG-IFOP','Licenciatura en Enfermería IFOP');
+INSERT INTO academic_plans(id,program_id,code,name,version,rvoe) VALUES
+ (100,101,'PLAN-PROPIO','Plan IFOP propio','2026','RVOE-PROPIO-CONSERVADO'),
+ (101,102,'PLAN-COLAB','Plan UNITEN colaboración','2026','RVOE-UNITEN-CONSERVADO'),
+ (102,101,'PLAN-NEUTRO-U','Plan sin sufijo','2026',NULL),
+ (103,100,'PLAN-NEUTRO-I','Plan sin sufijo','2026',NULL),
+ (104,101,'CODIGO-UNITEN','Otra versión IFOP','2026',NULL);`);
 legacy.close();process.env.DATABASE_PATH=filename;
 const {db,get,all,run,migrate}=await import('./db.js');
 afterAll(()=>{db.close();fs.rmSync(root,{recursive:true,force:true});});
@@ -34,4 +41,10 @@ it('upgrades existing single-campus academic data with all foreign keys and pass
  expect(get<{teacher_number:string}>('SELECT teacher_number FROM teachers WHERE id=100')!.teacher_number).toBe('DOC00100');
  const before=all('SELECT name FROM schema_migrations').length;migrate();expect(all('SELECT name FROM schema_migrations')).toHaveLength(before);
  expect(get<{foreign_keys:number}>('PRAGMA foreign_keys')!.foreign_keys).toBe(1);
+ expect(all<{id:number;certificate_authority:string}>("SELECT id,certificate_authority FROM academic_plans WHERE id BETWEEN 100 AND 104 ORDER BY id")).toEqual([
+  {id:100,certificate_authority:'ifop'},{id:101,certificate_authority:'uniten'},{id:102,certificate_authority:'uniten'},
+  {id:103,certificate_authority:'ifop'},{id:104,certificate_authority:'ifop'}
+ ]);
+ expect(get<{rvoe:string}>("SELECT rvoe FROM academic_plans WHERE id=100")!.rvoe).toBe('RVOE-PROPIO-CONSERVADO');
+ expect(get<{rvoe:string}>("SELECT rvoe FROM academic_plans WHERE id=101")!.rvoe).toBe('RVOE-UNITEN-CONSERVADO');
 });

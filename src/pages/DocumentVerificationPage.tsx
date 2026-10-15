@@ -33,6 +33,7 @@ export function DocumentVerificationPage() {
     return () => meta.remove();
   }, []);
   const document = result?.document;
+  const certification = document?.content.certification;
   const valid = result?.status === "valid";
   return <main className="verification-page">
     <header className="verification-brand">
@@ -61,6 +62,7 @@ export function DocumentVerificationPage() {
               <div><dt>Folio institucional</dt><dd className="verification-folio">{document.folio}</dd></div>
             </dl>
             <p className="verification-instructions">Compara estos datos con el documento impreso, incluido su folio. Esta consulta conserva la información registrada en la fecha de emisión.</p>
+            {certification && <section className="verification-calendar"><h3>{certification.collaborationAgreement ? "Convenio de colaboración con UNITEN" : "RVOE propio de IFOP"}</h3><dl className="verification-fields"><div className="verification-wide"><dt>Institución del plan</dt><dd>{certification.institution}</dd></div><div><dt>Clave de Centro de Trabajo (CCT)</dt><dd>{certification.cct}</dd></div><div><dt>RVOE del plan</dt><dd>{certification.rvoe || "No registrado"}</dd></div></dl></section>}
             {document.content.calendar && <section className="verification-calendar"><h3>Calendario del ciclo escolar</h3><p>Actividades del {calendarDate(document.content.calendar.start)} al {calendarDate(document.content.calendar.end)}.</p>{document.content.calendar.vacations.length ? document.content.calendar.vacations.map((vacation, index) => <p key={index}>Vacaciones del {calendarDate(vacation.start_date)} al {calendarDate(vacation.end_date)}.</p>) : <p>Sin periodos vacacionales registrados para este ciclo.</p>}</section>}
             {document.content.subjects && <>
               <h3>{document.type === "academic_history" ? "Asignaturas cursadas y del semestre actual" : "Asignaturas del semestre actual"}</h3>

@@ -7,6 +7,7 @@ import {
   normalizeMatriculationCode
 } from "../services/student-identity.js";
 import { ApiError, asId, asNumber, cleanText, optionalText } from "../utils.js";
+import { inferCertificateAuthority, type CertificateAuthority } from "../../shared/plan-certification.js";
 
 export const plansRouter = Router();
 
@@ -18,6 +19,12 @@ type NormalizedSubject = {
   recommendedPeriod: number;
   hoursPerWeek: number;
 };
+
+function certificateAuthority(value: unknown, fallback: CertificateAuthority): CertificateAuthority {
+  if (value === undefined) return fallback;
+  if (value !== "ifop" && value !== "uniten") throw new ApiError(400, "Selecciona IFOP con RVOE propio o UNITEN con convenio de colaboración.");
+  return value;
+}
 
 function planSelect(where = "1 = 1") {
   return `SELECT ap.*, p.name AS program_name, l.name AS level_name,
@@ -92,6 +99,8 @@ plansRouter.post("/", requirePermission("catalogs.manage"), (req: AuthenticatedR
   if (!code || !matriculationCode || !name || !version) throw new ApiError(400, "Clave, código para matrícula, nombre y versión son obligatorios.");
   if (!subjects.length) throw new ApiError(400, "Agrega al menos una asignatura al plan.");
   assertUniquePlan(programId, code, name, version);
+  const program = get<{name:string;code:string}>("SELECT name,code FROM programs WHERE id=?", programId)!;
+  const authority = certificateAuthority(req.body.certificateAuthority, inferCertificateAuthority(name, code, program.name, program.code));
 
   const normalized: NormalizedSubject[] = subjects.map((item: any, index: number) => {
     const subjectCode = cleanText(item.code, 60).toUpperCase();
@@ -111,8 +120,8 @@ plansRouter.post("/", requirePermission("catalogs.manage"), (req: AuthenticatedR
 
   const planId = transaction(() => {
     const inserted = run(
-      `INSERT INTO academic_plans(program_id, code, matriculation_code, name, version, rvoe, description, tuition_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO academic_plans(program_id, code, matriculation_code, name, version, rvoe, description, tuition_amount, certificate_authority)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       programId,
       code,
       matriculationCode,
@@ -120,7 +129,8 @@ plansRouter.post("/", requirePermission("catalogs.manage"), (req: AuthenticatedR
       version,
       rvoe,
       optionalText(req.body.description, 1000),
-      tuitionAmount
+      tuitionAmount,
+      authority
     );
     const id = Number(inserted.lastInsertRowid);
     normalized.forEach((item) => {
@@ -153,13 +163,15 @@ plansRouter.post("/", requirePermission("catalogs.manage"), (req: AuthenticatedR
     }
     return id;
   });
-  logActivity(req, "create", "academic_plans", planId, { code, matriculationCode, rvoe, subjectCount: normalized.length, tuitionAmount });
+  logActivity(req, "create", "academic_plans", planId, { code, matriculationCode, rvoe, certificateAuthority: authority, subjectCount: normalized.length, tuitionAmount });
   res.status(201).json(get(`${planSelect("ap.id = ?")}`, planId));
 });
 
 plansRouter.put("/:id", requirePermission("catalogs.manage"), (req: AuthenticatedRequest, res) => {
   const id = asId(req.params.id, "Plan académico");
-  if (!get("SELECT id FROM academic_plans WHERE id = ?", id)) throw new ApiError(404, "No se encontró el plan académico.");
+  const current = get<{certificate_authority:CertificateAuthority}>("SELECT certificate_authority FROM academic_plans WHERE id = ?", id);
+  if (!current) throw new ApiError(404, "No se encontró el plan académico.");
+  const authority = certificateAuthority(req.body.certificateAuthority, current.certificate_authority);
   const programId = asId(req.body.programId, "Programa");
   const code = cleanText(req.body.code, 60).toUpperCase();
   const matriculationCode = normalizeMatriculationCode(req.body.matriculationCode) || deriveMatriculationCode(code);
@@ -189,7 +201,7 @@ plansRouter.put("/:id", requirePermission("catalogs.manage"), (req: Authenticate
 
   transaction(() => {
     run(
-      `UPDATE academic_plans SET program_id = ?, code = ?, matriculation_code = ?, name = ?, version = ?, rvoe = ?, description = ?, tuition_amount = ?,
+      `UPDATE academic_plans SET program_id = ?, code = ?, matriculation_code = ?, name = ?, version = ?, rvoe = ?, description = ?, tuition_amount = ?, certificate_authority = ?,
        updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       programId,
       code,
@@ -199,6 +211,7 @@ plansRouter.put("/:id", requirePermission("catalogs.manage"), (req: Authenticate
       rvoe,
       optionalText(req.body.description, 1000),
       tuitionAmount,
+      authority,
       id
     );
     run("DELETE FROM plan_subjects WHERE plan_id = ?", id);
@@ -239,7 +252,7 @@ plansRouter.put("/:id", requirePermission("catalogs.manage"), (req: Authenticate
     }
   });
   const updated = get(`${planSelect("ap.id = ?")}`, id);
-  logActivity(req, "update", "academic_plans", id, { code, matriculationCode, rvoe, subjectCount: normalized.length, tuitionAmount });
+  logActivity(req, "update", "academic_plans", id, { code, matriculationCode, rvoe, certificateAuthority: authority, subjectCount: normalized.length, tuitionAmount });
   res.json(updated);
 });
 
