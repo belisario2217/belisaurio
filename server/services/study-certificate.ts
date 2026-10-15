@@ -145,7 +145,7 @@ export function drawStudyCertificate(doc: PDFKit.PDFDocument, data: StudyCertifi
   doc.on("pageAdded", heading);
   doc.font("Helvetica-Bold").fontSize(10).fillColor("#24364A").text("A QUIEN CORRESPONDA:", left, doc.y, { width });
   doc.moveDown(.7).font("Helvetica").fontSize(9.5)
-    .text(`La que suscribe, responsable de Control Escolar de ${data.settings.institution_name}, hace constar que ${certificateStudentTerm(data.student.curp)}:`, left, doc.y, { width, align: "justify", lineGap: 2 });
+    .text(`El que suscribe, responsable de Control Escolar de ${data.settings.institution_name}, hace constar que ${certificateStudentTerm(data.student.curp)}:`, left, doc.y, { width, align: "justify", lineGap: 2 });
   doc.moveDown(.55).font("Helvetica-Bold").fontSize(14).fillColor(primary)
     .text(data.student.student_name.toUpperCase(), left, doc.y, { width, align: "center" });
   doc.moveDown(.6);
