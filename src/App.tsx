@@ -75,6 +75,9 @@ export function App() {
               <Route path="/catalogos" element={<CatalogsPage />} />
               <Route path="/planes" element={<PlansPage />} />
               <Route path="/mi-avance" element={<StudentPortalPage />} />
+              <Route path="/mis-calificaciones" element={<StudentPortalPage view="grades" />} />
+              <Route path="/mis-pagos" element={<StudentPortalPage view="payments" />} />
+              <Route path="/mi-asistencia" element={<StudentPortalPage view="attendance" />} />
               <Route path="/mi-credencial" element={<MyCredentialPage />} />
               <Route path="/mensajes" element={<StudentMessagesPage />} />
               <Route path="/usuarios" element={<UsersPage />} />

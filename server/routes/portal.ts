@@ -6,6 +6,10 @@ import { ApiError } from "../utils.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
 import { studentAttendanceMonths } from "../services/daily-attendance.js";
+import { createPdf } from "../services/files.js";
+import { getAcademicStudent, type AcademicSubject } from "../services/academic-record.js";
+import { drawAcademicDocument, printedSubjects, publicAcademicStudent } from "../services/academic-documents.js";
+import { issueDocument } from "../services/document-verification.js";
 
 export const portalRouter = Router();
 
@@ -20,6 +24,8 @@ type PortalSubject = {
   explicit_status: "pending" | "in_progress" | "completed" | null;
   explicit_score: number | null;
   course_cycle_name: string | null;
+  school_cycle_id: number | null;
+  enrollment_id?: number | null;
   assignment_id: number | null;
   evaluation_mode: string | null;
   teacher_name: string | null;
@@ -36,7 +42,9 @@ function scoreOrNull(value: unknown) {
 }
 
 function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
-  const rows = gradeRows.filter((grade) => grade.subject_id === subject.subject_id);
+  let rows = gradeRows.filter((grade) => grade.subject_id === subject.subject_id
+    && (subject.school_cycle_id == null || grade.cycle_id === subject.school_cycle_id));
+  if (subject.school_cycle_id == null && rows.length) rows = rows.filter(row => row.cycle_id === rows.at(-1)!.cycle_id);
   const latest = rows.at(-1);
   const partialMode = [...rows].reverse().find((grade) =>
     grade.evaluation_mode === "partials" &&
@@ -52,19 +60,16 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
   const completedScores = rows
     .map((grade) => scoreOrNull(grade.final_score))
     .filter((score): score is number => score !== null);
-  const final_score = scoreOrNull(partialMode?.final_score) ?? scoreOrNull(subject.explicit_score) ?? (completedScores.length
+  const incomplete = !!partialMode && [partial_1, partial_2, partial_3].some(score => score == null);
+  const final_score = incomplete ? null : scoreOrNull(partialMode?.final_score) ?? scoreOrNull(subject.explicit_score) ?? (completedScores.length
     ? Number((completedScores.reduce((sum, score) => sum + score, 0) / completedScores.length).toFixed(1))
     : null);
   const passingScore = Math.max(...rows.map((grade) => Number(grade.passing_score ?? 0)), 0);
-  const status = partialMode && [partial_1, partial_2, partial_3].some((score) => score === null)
+  const status = incomplete
     ? "in_progress"
-    : subject.explicit_status === "completed"
-    ? "passed"
-    : final_score == null
-      ? subject.explicit_status === "in_progress" ? "in_progress" : "pending"
-      : final_score >= passingScore
-        ? "passed"
-        : "failed";
+    : final_score != null ? final_score >= passingScore ? "passed" : "failed"
+    : subject.explicit_status === "completed" ? "passed"
+    : subject.explicit_status === "in_progress" ? "in_progress" : "pending";
   const comments = [...new Set(rows.map((grade) => grade.comments).filter(Boolean))].join(" | ") || null;
   return {
     ...subject,
@@ -84,12 +89,12 @@ export function studentPortalData(studentId: number) {
   syncAcademicSubjectStatuses();
 
   const enrollment = get<any>(
-    `SELECT e.id AS enrollment_id, e.plan_id, e.group_id, e.enrolled_at,
-     COALESCE(e.tuition_start_date, sc.start_date) AS billing_start_date, e.tuition_due_day,
+    `SELECT e.id AS enrollment_id, COALESCE(e.plan_id,g.plan_id) AS plan_id, e.group_id, e.enrolled_at,
+     COALESCE(e.tuition_start_date, ec.start_date) AS billing_start_date, e.tuition_due_day,
      p.duration_periods, pl.tuition_amount, st.id AS student_id, st.student_number,
      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name,
      st.email, p.name AS program_name, g.name AS group_name, sh.name AS shift_name,
-     sc.name AS cycle_name, ap.name AS current_period, ap.sequence AS current_period_number, pl.name AS plan_name, pl.code AS plan_code,
+     sc.name AS cycle_name, sc.id AS active_cycle_id, ap.name AS current_period, ap.sequence AS current_period_number, pl.name AS plan_name, pl.code AS plan_code,
      pl.version AS plan_version, l.name AS level_name
      FROM enrollments e
      JOIN students st ON st.id = e.student_id
@@ -97,9 +102,11 @@ export function studentPortalData(studentId: number) {
      LEFT JOIN academic_levels l ON l.id = p.level_id
      JOIN groups g ON g.id = e.group_id
      JOIN shifts sh ON sh.id = e.shift_id
-     JOIN school_cycles sc ON sc.id = e.cycle_id
-     LEFT JOIN curricular_periods ap ON ap.id = e.curricular_period_id
-     LEFT JOIN academic_plans pl ON pl.id = e.plan_id
+     JOIN institution_settings i ON i.id = 1
+     JOIN school_cycles ec ON ec.id = e.cycle_id
+     JOIN school_cycles sc ON sc.id = COALESCE(g.active_cycle_id,i.active_cycle_id,e.cycle_id)
+     LEFT JOIN curricular_periods ap ON ap.id = COALESCE(e.curricular_period_id,g.curricular_period_id)
+     LEFT JOIN academic_plans pl ON pl.id = COALESCE(e.plan_id,g.plan_id)
      WHERE e.student_id = ? AND e.is_active = 1
      ORDER BY e.id DESC LIMIT 1`,
     studentId
@@ -108,36 +115,38 @@ export function studentPortalData(studentId: number) {
 
   const gradeRows = all<any>(
     `SELECT s.id AS subject_id, s.code, s.name, COALESCE(NULLIF(s.credits, 0), 1) AS subject_credits,
-     a.id AS assignment_id, a.evaluation_mode, ap.sequence AS period_sequence,
+     a.id AS assignment_id, a.evaluation_mode, ap.sequence AS period_sequence, ap.cycle_id,
      t.full_name AS teacher_name, gr.partial_1, gr.partial_2, gr.partial_3,
      gr.final_score, gr.status, gr.comments, gs.passing_score
      FROM subject_assignments a
      JOIN subjects s ON s.id = a.subject_id
      JOIN academic_periods ap ON ap.id = a.period_id
+     JOIN school_cycles sc ON sc.id = ap.cycle_id
      JOIN grading_scales gs ON gs.id = a.grading_scale_id
      LEFT JOIN teachers t ON t.id = a.teacher_id
      LEFT JOIN grades gr ON gr.assignment_id = a.id AND gr.enrollment_id = ?
-     WHERE a.group_id = ? AND a.is_active = 1
-     ORDER BY s.name, ap.sequence, a.id`,
+     WHERE a.group_id = ? AND a.is_active = 1 AND s.is_active = 1
+     ORDER BY s.name, sc.start_date, ap.sequence, a.id`,
     enrollment.enrollment_id,
     enrollment.group_id
   );
   const explicitSubjects = all<any>(
     `SELECT ss.id AS student_subject_id, NULL AS plan_subject_id, ss.subject_id, s.code, s.name,
-     ss.subject_type, ss.credits, ss.semester_number AS recommended_period,
+     ss.subject_type, ss.credits, ss.semester_number AS recommended_period, ss.school_cycle_id, ss.enrollment_id,
      ss.status AS explicit_status, ss.final_score AS explicit_score, ss.notes AS explicit_notes,
      sc.name AS course_cycle_name
      FROM student_subjects ss
      JOIN subjects s ON s.id = ss.subject_id
      LEFT JOIN school_cycles sc ON sc.id = ss.school_cycle_id
-     WHERE ss.student_id = ?
-     ORDER BY ss.semester_number, s.name`,
-    enrollment.student_id
+     WHERE ss.student_id = ? AND s.is_active = 1
+       AND (ss.plan_id = ? OR ss.plan_id IS NULL)
+     ORDER BY ss.semester_number, s.name, ss.id`,
+    enrollment.student_id, enrollment.plan_id
   );
   const planSubjects = enrollment.plan_id ? all<any>(
     `SELECT ps.id AS plan_subject_id, s.id AS subject_id, s.code, s.name,
      ps.subject_type, ps.credits, ps.recommended_period,
-     NULL AS explicit_status, NULL AS explicit_score, NULL AS course_cycle_name
+     NULL AS explicit_status, NULL AS explicit_score, NULL AS course_cycle_name, NULL AS school_cycle_id
      FROM plan_subjects ps
      JOIN subjects s ON s.id = ps.subject_id
      WHERE ps.plan_id = ?
@@ -153,10 +162,10 @@ export function studentPortalData(studentId: number) {
     name: grade.name,
     subject_type: "mandatory",
     credits: grade.subject_credits,
-    recommended_period: grade.period_sequence,
+    recommended_period: enrollment.current_period_number,
     explicit_status: null,
     explicit_score: null,
-    course_cycle_name: null
+    course_cycle_name: null, school_cycle_id: grade.cycle_id
   })).filter((subject, index, list) => list.findIndex((item) => item.subject_id === subject.subject_id) === index);
   const gradeOnlySubjects = gradeRows
     .filter((grade) => !baseSubjects.some((subject) => subject.subject_id === grade.subject_id) && !explicitSubjects.some((subject) => subject.subject_id === grade.subject_id))
@@ -167,10 +176,10 @@ export function studentPortalData(studentId: number) {
       name: grade.name,
       subject_type: "mandatory",
       credits: grade.subject_credits,
-      recommended_period: grade.period_sequence,
+      recommended_period: enrollment.current_period_number,
       explicit_status: null,
       explicit_score: null,
-      course_cycle_name: null
+      course_cycle_name: null, school_cycle_id: grade.cycle_id
     }));
   const subjects = [...explicitSubjects, ...baseSubjects, ...gradeOnlySubjects]
     .map((subject) => summarizeSubject(subject, gradeRows))
@@ -211,9 +220,9 @@ export function studentPortalData(studentId: number) {
 
   const totalCredits = subjects.reduce((sum, subject) => sum + Number(subject.credits), 0);
   const earnedCredits = subjects
-    .filter((subject) => subject.status === "passed")
+    .filter((subject) => subject.status === "passed" && subject.recommended_period <= enrollment.current_period_number)
     .reduce((sum, subject) => sum + Number(subject.credits), 0);
-  const graded = subjects.filter((subject) => subject.final_score != null);
+  const graded = subjects.filter((subject) => subject.final_score != null && subject.recommended_period <= enrollment.current_period_number);
   const average = graded.length
     ? graded.reduce((sum, subject) => sum + Number(subject.final_score), 0) / graded.length
     : null;
@@ -226,7 +235,7 @@ export function studentPortalData(studentId: number) {
       pendingCredits: Math.max(0, totalCredits - earnedCredits),
       percentage: totalCredits ? Number((earnedCredits / totalCredits * 100).toFixed(1)) : 0,
       average: average == null ? null : Number(average.toFixed(1)),
-      completedSubjects: subjects.filter((subject) => subject.status === "passed").length,
+      completedSubjects: subjects.filter((subject) => subject.status === "passed" && subject.recommended_period <= enrollment.current_period_number).length,
       totalSubjects: subjects.length
     },
     billing: buildBilling({
@@ -243,10 +252,55 @@ export function studentPortalData(studentId: number) {
     promotion: promotionEligibility(enrollment.enrollment_id),
     attendance,
     messages,
-    subjects
+    subjects,
+    activeSubjects: [...new Map(subjects.filter(subject => {
+      if (subject.recommended_period !== enrollment.current_period_number) return false;
+      if (subject.enrollment_id != null && subject.enrollment_id !== enrollment.enrollment_id) return false;
+      const assigned = gradeRows.some(row => row.subject_id === subject.subject_id && row.cycle_id === enrollment.active_cycle_id);
+      if (subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id) return assigned;
+      if (subject.explicit_status === "pending") return false;
+      return subject.explicit_status === "in_progress" || assigned;
+    }).map(subject => {
+      // Old captures used the enrollment's formation cycle. An assignment in the
+      // active cycle establishes a new attempt; its previous final never leaks in.
+      const base = subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id
+        ? { ...subject, school_cycle_id: enrollment.active_cycle_id, explicit_score: null, explicit_status: null }
+        : subject;
+      const active = summarizeSubject(base, gradeRows.filter(row => row.cycle_id === enrollment.active_cycle_id));
+      return [subject.subject_id, { ...active, course_cycle_name: enrollment.cycle_name,
+        status: active.status === "pending" ? "in_progress" as const : active.status }] as const;
+    })).values()]
   };
 }
-portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedRequest, res) => {
+export function activeStudentPortalData(studentId: number) {
+  const { activeSubjects, ...data } = studentPortalData(studentId);
+  return { ...data, subjects: activeSubjects };
+}
+function portalStudent(req: AuthenticatedRequest) {
   if (!req.user?.studentId) throw new ApiError(403, "Esta cuenta todavía no está vinculada con un alumno.");
-  res.json(studentPortalData(req.user.studentId));
+  return req.user.studentId;
+}
+portalRouter.get("/", requirePermission("portal.view"), (req: AuthenticatedRequest, res) => {
+  res.set("Cache-Control", "private, no-store").json(activeStudentPortalData(portalStudent(req)));
+});
+
+portalRouter.get("/report-card.pdf", requirePermission("portal.view"), async (req: AuthenticatedRequest, res) => {
+  const studentId = portalStudent(req), data = activeStudentPortalData(studentId), student = getAcademicStudent(studentId);
+  const subjects: AcademicSubject[] = data.subjects.map(subject => ({
+    subject_id: subject.subject_id, subject_code: subject.code, subject_name: subject.name,
+    semester_number: subject.recommended_period, subject_type: subject.subject_type, credits: subject.credits,
+    cycle_id: student.cycle_id, cycle_name: student.cycle_name,
+    partial_1: subject.partial_1, partial_2: subject.partial_2, partial_3: subject.partial_3,
+    final_score: subject.final_score, status: subject.status, comments: subject.comments
+  }));
+  const finals = subjects.filter(subject => subject.final_score != null);
+  const average = finals.length ? Number((finals.reduce((sum, subject) => sum + subject.final_score!, 0) / finals.length).toFixed(1)) : null;
+  const issued = await issueDocument("report_card", studentId, req.user!.id, publicAcademicStudent(student), {
+    purpose: "student_copy", subjects: printedSubjects(subjects), average,
+    notes: ["Documento informativo. No tiene valor para trámites."]
+  });
+  res.set("Cache-Control", "private, no-store");
+  const doc = createPdf(res, `boleta-del-alumno-${student.student_number.replace(/[^A-Za-z0-9_-]/g, "")}.pdf`);
+  drawAcademicDocument(doc, { student, subjects, average }, issued);
+  doc.end();
 });

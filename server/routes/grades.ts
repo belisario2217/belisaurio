@@ -55,7 +55,7 @@ function assignmentSelect(where = "1 = 1") {
   return `SELECT a.id, a.subject_id, s.code AS subject_code, s.name AS subject_name,
     a.group_id, g.name AS group_name, p.id AS program_id, p.name AS program_name,
     sh.id AS shift_id, sh.name AS shift_name, a.teacher_id, t.full_name AS teacher_name,
-    a.period_id, ap.name AS period_name, sc.name AS cycle_name, a.grading_scale_id,
+    a.period_id, ap.name AS period_name, ap.sequence AS period_sequence, sc.name AS cycle_name, a.grading_scale_id,
     gs.name AS scale_name, gs.min_score, gs.max_score, gs.passing_score, gs.decimals,
     a.grade_entry_locked, a.evaluation_mode, a.is_active
     FROM subject_assignments a
@@ -81,7 +81,7 @@ function saveGrade(
   partials?: Record<string, unknown>,
   enforceEligibility = false
 ) {
-  const assignment = get<{ min_score: number; max_score: number; passing_score: number; decimals: number; grade_entry_locked: number; evaluation_mode: string }>(
+  const assignment = get<{ min_score: number; max_score: number; passing_score: number; decimals: number; grade_entry_locked: number; evaluation_mode: string; period_sequence: number }>(
     `${assignmentSelect("a.id = ?")}`,
     assignmentId
   );
@@ -117,8 +117,8 @@ function saveGrade(
   const componentValues: Array<{ id: number; score: number; weighted: number }> = [];
   let partialValues: Array<number | null> = [current?.partial_1 ?? null, current?.partial_2 ?? null, current?.partial_3 ?? null];
   let partialsComplete = false;
-  if (partials && assignment.evaluation_mode === "partials") {
-    partialValues = ["partial1", "partial2", "partial3"].map((key) => {
+  if (assignment.evaluation_mode === "partials") {
+    if (partials) partialValues = ["partial1", "partial2", "partial3"].map((key) => {
       const input = partials[key];
       if (input === "" || input === null || input === undefined) return null;
       const value = asNumber(input, "CalificaciÃ³n parcial");
@@ -127,6 +127,10 @@ function saveGrade(
       }
       return value;
     });
+    else if (score != null) {
+      if (assignment.period_sequence < 1 || assignment.period_sequence > 3) throw new ApiError(400, "Selecciona el parcial que corresponde a esta calificación.");
+      partialValues[assignment.period_sequence - 1] = score;
+    }
     const captured = partialValues.filter((value): value is number => value !== null);
     score = captured.length ? captured.reduce((sum, value) => sum + value, 0) / captured.length : null;
     partialsComplete = captured.length === 3;
@@ -150,7 +154,7 @@ function saveGrade(
       : null;
   }
   const rounded = score === null ? null : Number(score.toFixed(assignment.decimals));
-  const status = rounded === null || (partials && !partialsComplete)
+  const status = rounded === null || (assignment.evaluation_mode === "partials" && !partialsComplete)
     ? "pending"
     : rounded >= assignment.passing_score ? "passed" : "failed";
   let gradeId: number;
@@ -197,20 +201,25 @@ function saveGrade(
     });
   }
   const curricular = get<any>(
-    `SELECT e.student_id, e.plan_id, e.cycle_id, a.subject_id, s.credits AS subject_credits,
+    `SELECT e.student_id, COALESCE(e.plan_id,g.plan_id) AS plan_id, ap.cycle_id, a.subject_id, s.credits AS subject_credits,
      COALESCE(ps.subject_type, 'mandatory') AS subject_type,
      COALESCE(ps.credits, NULLIF(s.credits, 0), 1) AS credits,
-     COALESCE(ps.recommended_period, ap.sequence, 1) AS semester_number
+     COALESCE((SELECT ss.semester_number FROM student_subjects ss
+       WHERE ss.enrollment_id=e.id AND ss.subject_id=a.subject_id AND ss.school_cycle_id=ap.cycle_id
+       ORDER BY ss.id DESC LIMIT 1), ps.recommended_period, cp.sequence, 1) AS semester_number
      FROM enrollments e
+     JOIN groups g ON g.id=e.group_id
+     LEFT JOIN curricular_periods cp ON cp.id=COALESCE(e.curricular_period_id,g.curricular_period_id)
      JOIN subject_assignments a ON a.id = ?
      JOIN subjects s ON s.id = a.subject_id
      JOIN academic_periods ap ON ap.id = a.period_id
-     LEFT JOIN plan_subjects ps ON ps.plan_id = e.plan_id AND ps.subject_id = a.subject_id
+     LEFT JOIN plan_subjects ps ON ps.plan_id = COALESCE(e.plan_id,g.plan_id) AND ps.subject_id = a.subject_id
      WHERE e.id = ?`,
     assignmentId,
     enrollmentId
   );
   if (curricular) {
+    const finalScore = assignment.evaluation_mode === "partials" && !partialsComplete ? null : rounded;
     run(
       `INSERT INTO student_subjects(student_id, enrollment_id, plan_id, subject_id, school_cycle_id,
        semester_number, subject_type, credits, status, final_score, notes)
@@ -227,8 +236,8 @@ function saveGrade(
       Math.max(1, Number(curricular.semester_number ?? 1)),
       curricular.subject_type,
       curricular.credits,
-      rounded == null ? "pending" : "completed",
-      rounded,
+      finalScore != null ? "completed" : partialValues.some(value => value != null) ? "in_progress" : "pending",
+      finalScore,
       comments
     );
   }

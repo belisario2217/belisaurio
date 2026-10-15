@@ -35,6 +35,7 @@ export function DocumentVerificationPage() {
   const document = result?.document;
   const certification = document?.content.certification;
   const valid = result?.status === "valid";
+  const studentCopy = document?.content.purpose === "student_copy";
   return <main className="verification-page">
     <header className="verification-brand">
       <InstitutionLogo logoPath={document?.institution.logoPath} />
@@ -47,7 +48,7 @@ export function DocumentVerificationPage() {
         : <>
           <section className={`verification-status verification-${valid ? "valid" : "invalid"}`} role="status">
             {valid ? <ShieldCheck size={40} /> : <ShieldX size={40} />}
-            <div><span>REGISTRO DE CONTROL ESCOLAR</span><h1>{valid ? "Documento oficial verificado" : result?.status === "revoked" ? "Documento revocado" : "Documento sin validación"}</h1><p>{result?.message}</p>{result?.revokedAt && <p>Revocado el {issuedDate(result.revokedAt)}.</p>}</div>
+            <div><span>REGISTRO DE CONTROL ESCOLAR</span><h1>{valid ? studentCopy ? "Boleta informativa verificada" : "Documento oficial verificado" : result?.status === "revoked" ? "Documento revocado" : "Documento sin validación"}</h1><p>{result?.message}</p>{result?.revokedAt && <p>Revocado el {issuedDate(result.revokedAt)}.</p>}</div>
           </section>
           {document && <article className="verification-document">
             <div className="verification-document-title"><FileCheck2 size={23} /><div><span>DOCUMENTO EMITIDO</span><h2>{document.title}</h2></div></div>
@@ -72,7 +73,7 @@ export function DocumentVerificationPage() {
             </>}
             {document.content.payments && <><h3>Movimientos registrados</h3><div className="table-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Folio físico</th><th>Importe</th><th>Estado</th></tr></thead><tbody>{document.content.payments.map((payment, index) => <tr key={index}><td>{calendarDate(payment.date)}</td><td>{payment.concept}</td><td>{payment.folio}</td><td>{money(payment.amount)}</td><td>Pagado</td></tr>)}</tbody></table></div><p className="verification-total">Total pagado: {money(document.content.totalPaid || 0)}</p></>}
             {document.content.notes?.map((note, index) => <p key={index}>{note}</p>)}
-            <footer><strong>{document.institution.directorName}</strong><span>Control Escolar</span><small>{document.type === "account_statement" ? "Código de verificación SHA-256" : "Huella del registro SHA-256"}</small><code>{document.type === "account_statement" ? `EC-${result?.fingerprint?.toUpperCase()}` : result?.fingerprint}</code></footer>
+            <footer>{!studentCopy && <><strong>{document.institution.directorName}</strong><span>Control Escolar</span></>}<small>{document.type === "account_statement" ? "Código de verificación SHA-256" : "Huella del registro SHA-256"}</small><code>{document.type === "account_statement" ? `EC-${result?.fingerprint?.toUpperCase()}` : result?.fingerprint}</code></footer>
           </article>}
         </>}
       <p className="verification-footer">{document?.institution.address}<br />{document?.institution.footer}</p>
