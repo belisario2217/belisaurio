@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Button, Field, Select } from "../components/Ui";
 import { InstitutionLogo } from "../components/InstitutionLogo";
+import { CycleCalendarSettings, type CycleCalendar } from "../components/CycleCalendarSettings";
 
 type CalendarEvent = {
   id: number;
@@ -40,6 +41,7 @@ export function SettingsPage() {
   const [scales, setScales] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [cycleCalendars, setCycleCalendars] = useState<CycleCalendar[]>([]);
   const [calendarForm, setCalendarForm] = useState(blankCalendarEvent);
   const [editingCalendarId, setEditingCalendarId] = useState<number | null>(null);
   const [tab, setTab] = useState<"institution" | "calendar" | "audit">("institution");
@@ -53,6 +55,7 @@ export function SettingsPage() {
     setCycles(result.cycles);
     setScales(result.scales);
     setCalendarEvents(result.calendarEvents ?? []);
+    setCycleCalendars(result.cycleCalendars ?? []);
     if (can("audit.view")) api<any[]>("/settings/audit").then(setAudit);
   }
   useEffect(() => { load(); }, []);
@@ -73,7 +76,8 @@ export function SettingsPage() {
           defaultScaleId: settings.default_scale_id,
           footerText: settings.footer_text,
           primaryColor: settings.primary_color,
-          secondaryColor: settings.secondary_color
+          secondaryColor: settings.secondary_color,
+          publicAppUrl: settings.public_app_url
         }
       });
       setSettings(updated);
@@ -190,10 +194,11 @@ export function SettingsPage() {
                 <Field label="Teléfono"><input value={settings.phone ?? ""} onChange={(event) => setSettings({ ...settings, phone: event.target.value })} /></Field>
                 <Field label="Dirección"><input value={settings.address ?? ""} onChange={(event) => setSettings({ ...settings, address: event.target.value })} /></Field>
                 <Field label="Pie de página"><input value={settings.footer_text ?? ""} onChange={(event) => setSettings({ ...settings, footer_text: event.target.value })} /></Field>
+                <Field label="URL pública de la plataforma" hint="Dominio HTTPS que abrirán los QR de validación. En Render se usa el dominio del servicio si se deja vacío."><input type="url" placeholder="https://escuela.edu.mx" value={settings.public_app_url ?? ""} onChange={event => setSettings({ ...settings, public_app_url: event.target.value })} /></Field>
               </div>
             </div>
             <div className="settings-section">
-              <div className="settings-title"><ShieldCheck size={20} /><div><h2>Parámetros académicos</h2><p>Valores predeterminados para la operación activa.</p></div></div>
+              <div className="settings-title"><ShieldCheck size={20} /><div><h2>Parámetros académicos</h2><p>El ciclo del grupo tiene prioridad; si no está definido, se utiliza el ciclo activo institucional. El semestre de cada alumno se configura por separado.</p></div></div>
               <div className="form-grid two">
                 <Field label="Ciclo activo"><Select options={cycles} value={settings.active_cycle_id ?? ""} onChange={(event) => setSettings({ ...settings, active_cycle_id: event.target.value })} /></Field>
                 <Field label="Escala predeterminada"><Select options={scales} value={settings.default_scale_id ?? ""} onChange={(event) => setSettings({ ...settings, default_scale_id: event.target.value })} /></Field>
@@ -231,6 +236,7 @@ export function SettingsPage() {
           </aside>
         </form>
       ) : tab === "calendar" ? (
+        <><CycleCalendarSettings cycles={cycles} calendars={cycleCalendars} activeCycleId={settings.active_cycle_id} onSaved={load} />
         <div className="calendar-settings-layout">
           <form className="settings-section calendar-event-form" onSubmit={saveCalendarEvent}>
             <div className="settings-title"><CalendarRange size={20} /><div><h2>{editingCalendarId ? "Editar fecha importante" : "Agregar fecha importante"}</h2><p>Configura clases, evaluaciones, inscripciones, vacaciones y cierres.</p></div></div>
@@ -250,7 +256,7 @@ export function SettingsPage() {
             <div className="table-wrap"><table><thead><tr><th>Evento</th><th>Ciclo</th><th>Periodo</th><th>Automatización</th><th /></tr></thead><tbody>{calendarEvents.map((event) => <tr key={event.id}><td><strong className="table-main">{event.title}</strong><span className="table-sub">{calendarTypes.find((type) => type.value === event.event_type)?.label ?? event.event_type}</span></td><td>{event.cycle_name ?? "Institucional"}</td><td>{event.start_date === event.end_date ? event.start_date : `${event.start_date} al ${event.end_date}`}</td><td>{event.auto_start_subjects ? "Inicia materias" : "Solo informativa"}</td><td><div className="inline-actions"><button type="button" className="icon-button" onClick={() => editCalendarEvent(event)} title="Editar"><Pencil size={16} /></button><button type="button" className="icon-button" onClick={() => deleteCalendarEvent(event)} title="Eliminar"><Trash2 size={16} /></button></div></td></tr>)}</tbody></table></div>
             {!calendarEvents.length && <p className="empty-calendar-copy">Aún no hay fechas académicas configuradas.</p>}
           </section>
-        </div>
+        </div></>
       ) : (
         <section className="table-section">
           <header className="section-heading"><div><span>Auditoría</span><h2>Actividad reciente</h2></div></header>

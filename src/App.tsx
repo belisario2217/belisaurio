@@ -26,6 +26,7 @@ const MessagesAdminPage = lazy(() => import("./pages/MessagesAdminPage").then((m
 const StudentMessagesPage = lazy(() => import("./pages/StudentMessagesPage").then((module) => ({ default: module.StudentMessagesPage })));
 const GroupManagementPage = lazy(() => import("./pages/GroupManagementPage").then((module) => ({ default: module.GroupManagementPage })));
 const AttendancePage = lazy(() => import("./pages/AttendancePage").then((module) => ({ default: module.AttendancePage })));
+const DocumentVerificationPage = lazy(() => import("./pages/DocumentVerificationPage").then(module => ({ default: module.DocumentVerificationPage })));
 
 function HomePage() {
   const { user, can } = useAuth();
@@ -45,6 +46,7 @@ export function App() {
   return (
     <Suspense fallback={<div className="app-loader"><LoaderCircle className="spin" size={28} /><span>Cargando módulo</span></div>}>
       <Routes>
+        <Route path="/verificar-documento/:token" element={<DocumentVerificationPage />} />
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="*" element={
           <Protected>

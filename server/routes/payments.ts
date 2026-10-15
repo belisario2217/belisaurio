@@ -7,11 +7,13 @@ import { createPdf, parseWorkbook, pdfTable, sendWorkbook, type TabularRow } fro
 import {
   sendAccountStatementPdf,
   sendAccountStatementWorkbook,
+  physicalFolio,
   type StatementInstitutionSettings
 } from "../services/account-statement.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import multer from "multer";
+import { issueDocument } from "../services/document-verification.js";
 
 export const paymentsRouter = Router();
 
@@ -235,7 +237,7 @@ function getStudentAccount(studentId: number) {
      JOIN groups g ON g.id = e.group_id
      JOIN shifts sh ON sh.id = e.shift_id
      JOIN school_cycles sc ON sc.id = e.cycle_id
-     LEFT JOIN curricular_periods period ON period.id = e.curricular_period_id
+     LEFT JOIN curricular_periods period ON period.id = COALESCE(e.curricular_period_id, g.curricular_period_id)
      LEFT JOIN academic_plans ap ON ap.id = e.plan_id
      WHERE e.student_id = ? AND e.is_active = 1
      ORDER BY e.id DESC LIMIT 1`,
@@ -902,14 +904,27 @@ paymentsRouter.get("/student/:id", requirePermission("payments.view"), (req, res
   res.json(fullAccount(asId(req.params.id, "Alumno"), throughMonth));
 });
 
-paymentsRouter.get("/student/:id/statement", requirePermission("payments.export"), async (req, res) => {
+paymentsRouter.get("/student/:id/statement", requirePermission("payments.export"), async (req: AuthenticatedRequest, res) => {
   const throughMonth = req.query.throughMonth ? validMonth(req.query.throughMonth) : undefined;
-  const data = fullAccount(asId(req.params.id, "Alumno"), throughMonth);
+  const studentId = asId(req.params.id, "Alumno");
+  const data = fullAccount(studentId, throughMonth);
   const format = cleanText(req.query.format || "pdf", 10).toLowerCase();
+  if (!["pdf", "xlsx"].includes(format)) throw new ApiError(400, "El formato del estado de cuenta debe ser PDF o XLSX.");
   const settings = statementSettings();
-  if (format === "xlsx") return sendAccountStatementWorkbook(res, data, settings);
-  if (format !== "pdf") throw new ApiError(400, "El formato del estado de cuenta debe ser PDF o XLSX.");
-  return sendAccountStatementPdf(res, data, settings);
+  const cycle = get<{name:string}>(`SELECT sc.name FROM enrollments e JOIN groups g ON g.id = e.group_id
+    JOIN institution_settings i ON i.id = 1 JOIN school_cycles sc ON sc.id = COALESCE(g.active_cycle_id, i.active_cycle_id, e.cycle_id)
+    WHERE e.student_id = ? AND e.is_active = 1 ORDER BY e.id DESC LIMIT 1`, studentId);
+  if (cycle) data.student.cycle_name = cycle.name;
+  const issued = await issueDocument("account_statement", studentId, req.user!.id, {
+    name: data.student.student_name, number: data.student.student_number, program: data.student.program_name,
+    group: data.student.group_name, shift: data.student.shift_name, semester: data.student.currentPeriodNumber,
+    semesterName: data.student.current_period || "Sin semestre registrado", cycle: data.student.cycle_name
+  }, { totalPaid: data.billing.summary.paidAmount, payments: data.billing.payments.map(payment => ({
+    date: payment.paid_at, concept: payment.concept, amount: payment.amount,
+    folio: physicalFolio(payment.notes)
+  })) });
+  if (format === "xlsx") return sendAccountStatementWorkbook(res, data, settings, issued);
+  return sendAccountStatementPdf(res, data, settings, issued);
 });
 
 paymentsRouter.get("/report", requirePermission("payments.export"), (req, res) => {

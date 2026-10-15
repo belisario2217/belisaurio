@@ -4,8 +4,11 @@ import { all, get, run, transaction } from "../db.js";
 import { createPdf, pdfTable, sendWorkbook } from "../services/files.js";
 import { sendAttendancePdf, sendAttendanceWorkbook } from "../services/attendance-list.js";
 import { syncGroupSubjects } from "../services/group-subjects.js";
-import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
+import { getCycleCalendar, syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
 import { sendStudyCertificate } from "../services/study-certificate.js";
+import { getAcademicRecord } from "../services/academic-record.js";
+import { drawAcademicDocument, printedSubjects, publicAcademicStudent } from "../services/academic-documents.js";
+import { issueDocument, type IssuedDocument } from "../services/document-verification.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 
 export const reportsRouter = Router();
@@ -62,14 +65,6 @@ function studentListRows(groupId?: number, fields = defaultStudentListFields) {
   );
 }
 
-function groupByCycle(records: any[]) {
-  return records.reduce<Record<string, any[]>>((grouped, record) => {
-    const key = record.course_cycle == null || Number(record.course_cycle) >= 999 ? "Sin ciclo" : `Ciclo ${record.course_cycle}`;
-    (grouped[key] ??= []).push(record);
-    return grouped;
-  }, {});
-}
-
 function ensureAcademicPeriod(cycleId: number) {
   const activePeriod = get<{ id: number }>(
     "SELECT id FROM academic_periods WHERE cycle_id = ? AND is_active = 1 ORDER BY sequence, id LIMIT 1",
@@ -100,21 +95,6 @@ function ensureAcademicPeriod(cycleId: number) {
     cycle.end_date
   );
   return { id: Number(result.lastInsertRowid) };
-}
-
-function drawGradeSection(doc: PDFKit.PDFDocument, title: string, records: any[], primary: string) {
-  if (!records.length) return;
-  if (doc.y > 660) doc.addPage();
-  doc.moveDown(0.6);
-  doc.fillColor(primary).font("Helvetica-Bold").fontSize(11).text(title);
-  doc.moveDown(0.25);
-  pdfTable(doc, ["Ciclo", "Materia", "Evaluacion", "Calificacion", "Estatus"], records.map((grade) => [
-    grade.course_cycle == null || Number(grade.course_cycle) >= 999 ? "-" : String(grade.course_cycle),
-    grade.subject_name,
-    grade.period_name,
-    grade.final_score == null ? "-" : Number(grade.final_score).toFixed(1),
-    grade.final_score == null ? "Por cursar" : grade.status === "failed" ? "Reprobada" : "CURSADA"
-  ]), [55, 185, 105, 80, 103]);
 }
 
 function defaultAcademicContext(groupId: number, cycleId: number | null) {
@@ -257,164 +237,7 @@ function deleteGradeAssignmentsForSubjects(groupId: number, subjectIds: number[]
   return assignmentIds.length;
 }
 
-function drawReportCard(doc: PDFKit.PDFDocument, studentId: number, periodId?: number) {
-  const settings = get<any>("SELECT * FROM institution_settings WHERE id = 1")!;
-  const student = get<any>(
-    `SELECT st.id, st.student_number, e.id AS enrollment_id, e.plan_id,
-     TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS name,
-     p.name AS program_name, sh.name AS shift_name, g.name AS group_name, sc.name AS cycle_name
-     FROM students st
-     JOIN enrollments e ON e.student_id = st.id AND e.is_active = 1
-     JOIN programs p ON p.id = e.program_id
-     JOIN shifts sh ON sh.id = e.shift_id
-     JOIN groups g ON g.id = e.group_id
-     JOIN school_cycles sc ON sc.id = e.cycle_id
-     WHERE st.id = ?
-     ORDER BY e.id DESC LIMIT 1`,
-    studentId
-  );
-  if (!student) throw new ApiError(404, "No se encontro el alumno.");
-
-  const params: number[] = [studentId, studentId, studentId];
-  let periodClause = "";
-  if (periodId) {
-    periodClause = "AND ap.id = ?";
-    params.push(periodId);
-  }
-
-  const grades = all<any>(
-    `WITH explicit_subjects AS (
-       SELECT LOWER(TRIM(s.name)) AS subject_key, ss.subject_id, ss.semester_number AS course_cycle, ss.credits, ss.status AS explicit_status,
-        ss.final_score AS explicit_score, ss.notes AS explicit_notes
-       FROM student_subjects ss
-       JOIN subjects s ON s.id = ss.subject_id
-       WHERE ss.student_id = ?
-     ),
-     base_raw AS (
-       SELECT es.subject_key, es.subject_id, es.course_cycle, es.credits, es.explicit_status, es.explicit_score, es.explicit_notes
-       FROM explicit_subjects es
-       UNION
-       SELECT LOWER(TRIM(s.name)) AS subject_key, ps.subject_id, ps.recommended_period AS course_cycle, ps.credits,
-        NULL AS explicit_status, NULL AS explicit_score, NULL AS explicit_notes
-       FROM plan_subjects ps
-       JOIN subjects s ON s.id = ps.subject_id
-       WHERE ps.plan_id = (
-         SELECT e.plan_id FROM enrollments e
-         WHERE e.student_id = ? AND e.is_active = 1
-         ORDER BY e.id DESC LIMIT 1
-       )
-       AND NOT EXISTS (SELECT 1 FROM explicit_subjects es WHERE es.subject_key = LOWER(TRIM(s.name)))
-       UNION
-       SELECT LOWER(TRIM(s.name)) AS subject_key, s.id AS subject_id, NULL AS course_cycle, s.credits,
-        NULL AS explicit_status, NULL AS explicit_score, NULL AS explicit_notes
-       FROM grades gr
-       JOIN enrollments e ON e.id = gr.enrollment_id
-       JOIN subject_assignments a ON a.id = gr.assignment_id
-       JOIN subjects s ON s.id = a.subject_id
-       WHERE e.student_id = ?
-       AND NOT EXISTS (SELECT 1 FROM explicit_subjects)
-       AND NOT EXISTS (
-         SELECT 1 FROM plan_subjects ps
-         WHERE ps.plan_id = e.plan_id AND ps.subject_id = s.id
-       )
-       AND NOT EXISTS (SELECT 1 FROM explicit_subjects es WHERE es.subject_key = LOWER(TRIM(s.name)))
-     ),
-     base_subjects AS (
-       SELECT subject_key, MIN(subject_id) AS subject_id,
-        COALESCE(MIN(CASE WHEN explicit_status IS NOT NULL THEN course_cycle END), MIN(course_cycle)) AS course_cycle,
-        MAX(credits) AS credits,
-        MAX(explicit_status) AS explicit_status,
-        MAX(explicit_score) AS explicit_score,
-        MAX(explicit_notes) AS explicit_notes
-       FROM base_raw
-       GROUP BY subject_key
-     ),
-     grade_rows AS (
-       SELECT LOWER(TRIM(s.name)) AS subject_key, s.id AS subject_id, ap.sequence AS period_sequence,
-        CASE WHEN a.grade_entry_locked = 1 THEN 'ORDINARIO' ELSE ap.name END AS period_name,
-        gr.final_score, gr.comments, gs.passing_score
-       FROM grades gr
-       JOIN enrollments e ON e.id = gr.enrollment_id
-       JOIN subject_assignments a ON a.id = gr.assignment_id
-       JOIN subjects s ON s.id = a.subject_id
-       JOIN academic_periods ap ON ap.id = a.period_id
-       JOIN grading_scales gs ON gs.id = a.grading_scale_id
-       WHERE e.student_id = ? ${periodClause}
-     )
-     SELECT s.name AS subject_name,
-      COALESCE(bs.course_cycle, MIN(gr.period_sequence), 999) AS course_cycle,
-      CASE
-       WHEN COUNT(gr.final_score) = 0 THEN 'Pendiente'
-        WHEN MAX(bs.explicit_status) = 'completed' THEN 'ORDINARIO'
-        WHEN SUM(CASE WHEN gr.period_name = 'ORDINARIO' THEN 1 ELSE 0 END) > 0 THEN 'ORDINARIO'
-        ELSE COALESCE(MAX(gr.period_name), 'Pendiente')
-      END AS period_name,
-      COALESCE(MAX(bs.explicit_score), CASE WHEN COUNT(gr.final_score) = 0 THEN NULL ELSE ROUND(AVG(gr.final_score), 1) END) AS final_score,
-      CASE
-        WHEN MAX(bs.explicit_status) = 'completed' THEN 'passed'
-        WHEN MAX(bs.explicit_status) IN ('pending', 'in_progress') AND MAX(bs.explicit_score) IS NULL AND COUNT(gr.final_score) = 0 THEN 'pending'
-        WHEN COALESCE(MAX(bs.explicit_score), AVG(gr.final_score)) IS NULL THEN 'pending'
-        WHEN COALESCE(MAX(bs.explicit_score), AVG(gr.final_score)) >= COALESCE(MAX(gr.passing_score), 0) THEN 'passed'
-        ELSE 'failed'
-      END AS status,
-      TRIM(COALESCE(MAX(bs.explicit_notes), '') || CASE WHEN GROUP_CONCAT(DISTINCT gr.comments) IS NULL THEN '' ELSE ' ' || GROUP_CONCAT(DISTINCT gr.comments) END) AS comments,
-      COALESCE(MAX(gr.passing_score), 0) AS passing_score
-     FROM base_subjects bs
-     JOIN subjects s ON s.id = bs.subject_id
-     LEFT JOIN grade_rows gr ON gr.subject_key = bs.subject_key
-     GROUP BY bs.subject_key, s.name, bs.course_cycle
-     ORDER BY COALESCE(bs.course_cycle, MIN(gr.period_sequence), 999), s.name`,
-    studentId,
-    ...params
-  );
-
-  const completed = grades.filter((item) => item.final_score != null);
-  const pending = grades.filter((item) => item.final_score == null);
-  const average = completed.length ? completed.reduce((sum, item) => sum + Number(item.final_score), 0) / completed.length : null;
-  const failed = completed.some((item) => item.final_score != null && item.final_score < item.passing_score);
-  const status = !completed.length ? "Pendiente" : failed ? "Reprobado" : "Aprobado";
-  const primary = settings.primary_color || "#102a43";
-
-  doc.fillColor(primary).font("Helvetica-Bold").fontSize(16).text("Boleta de calificaciones", 42, 134);
-  doc.fillColor("#334e68").font("Helvetica").fontSize(10);
-  doc.text(`Alumno: ${student.name}`, 42, 166);
-  doc.text(`Matricula: ${student.student_number}`, 340, 166);
-  doc.text(`Programa: ${student.program_name}`, 42, 184);
-  doc.text(`Turno: ${student.shift_name}`, 340, 184);
-  doc.text(`Grupo: ${student.group_name}`, 42, 202);
-  doc.text(`Ciclo escolar: ${student.cycle_name}`, 340, 202);
-  doc.y = 232;
-
-  Object.entries(groupByCycle(completed)).forEach(([cycle, records]) => {
-    drawGradeSection(doc, `Materias cursadas - ${cycle}`, records, primary);
-  });
-  Object.entries(groupByCycle(pending)).forEach(([cycle, records]) => {
-    drawGradeSection(doc, `Materias pendientes / otro semestre - ${cycle}`, records, primary);
-  });
-  if (!grades.length) {
-    doc.fillColor("#627d98").font("Helvetica").fontSize(10).text("No hay materias registradas para este alumno.");
-  }
-
-  doc.moveDown(1);
-  doc.fillColor(primary).font("Helvetica-Bold").fontSize(12).text(
-    `Promedio general: ${average == null ? "Pendiente" : average.toFixed(1)}    Estatus: ${status}`,
-    { align: "right" }
-  );
-  const comments = grades.map((grade) => grade.comments).filter(Boolean).join(" | ");
-  if (comments) {
-    doc.moveDown().fillColor("#486581").font("Helvetica").fontSize(9).text(`Observaciones: ${comments}`);
-  }
-  const signatureY = Math.max(doc.y + 28, 620);
-  if (signatureY > 690) doc.addPage();
-  const finalSignatureY = signatureY > 690 ? 150 : signatureY;
-  doc.moveTo(80, finalSignatureY).lineTo(260, finalSignatureY).strokeColor("#9fb3c8").stroke();
-  doc.moveTo(350, finalSignatureY).lineTo(530, finalSignatureY).stroke();
-  doc.fillColor("#627d98").fontSize(8).text(settings.director_name || "Responsable academico", 80, finalSignatureY + 6, { width: 180, align: "center" });
-  doc.text("Firma del padre, madre o tutor", 350, finalSignatureY + 6, { width: 180, align: "center" });
-
-}
-
-reportsRouter.get("/report-card.pdf", requirePermission("reports.generate"), (req, res) => {
+reportsRouter.get("/report-card.pdf", requirePermission("reports.generate"), async (req: AuthenticatedRequest, res) => {
   const studentId = req.query.studentId ? asId(req.query.studentId, "Alumno") : null;
   const groupId = req.query.groupId ? asId(req.query.groupId, "Grupo") : null;
   const periodId = req.query.periodId ? asId(req.query.periodId, "Periodo") : undefined;
@@ -423,21 +246,59 @@ reportsRouter.get("/report-card.pdf", requirePermission("reports.generate"), (re
     ? [studentId]
     : all<{ id: number }>(
       `SELECT st.id FROM students st JOIN enrollments e ON e.student_id = st.id
-       WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1 ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
+       WHERE e.group_id = ? AND e.is_active = 1 AND st.is_active = 1
+         AND e.id = (SELECT latest.id FROM enrollments latest WHERE latest.student_id = st.id AND latest.is_active = 1 ORDER BY latest.id DESC LIMIT 1)
+       ORDER BY spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
       groupId!
     ).map((student) => student.id);
   if (!studentIds.length) throw new ApiError(404, "El grupo no tiene alumnos activos.");
+  const records = studentIds.map(id => getAcademicRecord(id, "report_card", periodId));
+  const documents: IssuedDocument[] = [];
+  for (const record of records) documents.push(await issueDocument("report_card", record.student.id, req.user!.id,
+    publicAcademicStudent(record.student), { subjects: printedSubjects(record.subjects), average: record.average }));
   const doc = createPdf(res, groupId ? `boletas-grupo-${groupId}.pdf` : `boleta-${studentId}.pdf`);
-  studentIds.forEach((id, index) => {
+  records.forEach((record, index) => {
     if (index) doc.addPage();
-    drawReportCard(doc, id, periodId);
+    drawAcademicDocument(doc, record, documents[index]);
   });
   doc.end();
 });
 
-reportsRouter.get("/study-certificate.pdf", requirePermission("reports.generate"), (req, res) => {
+reportsRouter.get("/academic-history.pdf", requirePermission("reports.generate"), async (req: AuthenticatedRequest, res) => {
   const studentId = asId(req.query.studentId, "Alumno");
-  sendStudyCertificate(res, studentId);
+  const record = getAcademicRecord(studentId, "academic_history");
+  const issued = await issueDocument("academic_history", studentId, req.user!.id, publicAcademicStudent(record.student), {
+    subjects: printedSubjects(record.subjects), average: record.average
+  });
+  const doc = createPdf(res, `historial-academico-${record.student.student_number}.pdf`);
+  drawAcademicDocument(doc, record, issued);
+  doc.end();
+});
+
+reportsRouter.get("/academic-context", requirePermission("reports.generate"), (req, res) => {
+  const record = getAcademicRecord(asId(req.query.studentId, "Alumno"), "report_card");
+  res.json({ student: publicAcademicStudent(record.student), calendar: getCycleCalendar(record.student.cycle_id) });
+});
+
+reportsRouter.get("/study-certificate.pdf", requirePermission("reports.generate"), (req: AuthenticatedRequest, res) => {
+  const studentId = asId(req.query.studentId, "Alumno");
+  return sendStudyCertificate(res, studentId, req.user!.id);
+});
+
+reportsRouter.get("/issued-documents", requirePermission("reports.generate"), (req, res) => {
+  const studentId = asId(req.query.studentId, "Alumno");
+  res.json(all(`SELECT id, folio, document_type, issued_at, verification_url, revoked_at FROM issued_documents
+    WHERE student_id = ? ORDER BY issued_at DESC, id DESC LIMIT 50`, studentId));
+});
+
+reportsRouter.post("/issued-documents/:id/revoke", requirePermission("reports.generate"), (req: AuthenticatedRequest, res) => {
+  const id = String(req.params.id);
+  if (!get("SELECT id FROM issued_documents WHERE id = ?", id)) throw new ApiError(404, "No se encontró el documento.");
+  const reason = cleanText(req.body.reason, 300);
+  if (!reason) throw new ApiError(400, "Escribe el motivo de revocación.");
+  run("UPDATE issued_documents SET revoked_at = COALESCE(revoked_at, ?), revocation_reason = ? WHERE id = ?", new Date().toISOString(), reason, id);
+  logActivity(req, "revoke-document", "issued_documents", id, { reason });
+  res.json({ message: "Documento revocado. El QR mostrará que ya no es válido." });
 });
 
 function curricularWhere(req: any) {

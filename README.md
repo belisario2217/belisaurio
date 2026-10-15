@@ -67,6 +67,9 @@ La base se crea en `data/school.db`. Las migraciones se aplican automáticamente
 Los catálogos académicos son datos editables. Programas, turnos, grupos, ciclos, periodos,
 materias, docentes, criterios, escalas y estatus no están fijados en la interfaz.
 
+Consulta la [guía de documentos oficiales y validación por QR](docs/DOCUMENTOS-OFICIALES.md)
+para configurar la emisión de boletas, historial, constancias y estados de cuenta.
+
 ## Funcionalidad incluida
 
 - Inicio de sesión, usuarios activos/inactivos, roles y permisos editables.
@@ -100,6 +103,9 @@ materias, docentes, criterios, escalas y estatus no están fijados en la interfa
 - Calendario académico configurable con clases, evaluaciones, inscripciones, vacaciones, reanudaciones y cierres.
 - Cambio masivo del estado de materias por grupo, ciclo y semestre, con inicio automático según la fecha configurada.
 - Boletas individuales y masivas en PDF.
+- Boletas del semestre actual e historial acumulado sin materias futuras.
+- Documentos con folio, QR público, registro inmutable y revocación administrativa.
+- Constancias con inicio, fin y vacaciones del ciclo activo, independiente del semestre.
 - Reportes de asistencia, concentrado, materias, docentes, reprobados y destacados.
 - Analíticas por grupo, programa, turno, materia, periodo y docente.
 - Logo, colores, datos institucionales, ciclo y escala configurables.

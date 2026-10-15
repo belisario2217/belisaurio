@@ -2,6 +2,7 @@ import { Router } from "express";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { all, get, run, transaction } from "../db.js";
 import { ApiError, asId, booleanInt, cleanText, optionalText } from "../utils.js";
+import { getCycleCalendar, validateCycleCalendar } from "../services/academic-calendar.js";
 
 type FieldDefinition = {
   name: string;
@@ -60,7 +61,7 @@ const definitions: Record<string, CatalogDefinition> = {
     singular: "Ciclo escolar",
     fields: [
       { name: "name", label: "Nombre", required: true },
-      { name: "start_date", label: "Inicio de ciclo / cobro mensual", type: "date", required: true },
+      { name: "start_date", label: "Inicio de actividades del ciclo", type: "date", required: true },
       { name: "end_date", label: "Fecha final", type: "date", required: true }
     ]
   },
@@ -312,6 +313,7 @@ catalogsRouter.post("/:type", requirePermission("catalogs.manage"), (req: Authen
       throw new ApiError(400, `${field.label} es obligatorio.`);
     }
   }
+  if (catalog.table === "school_cycles") validateCycleCalendar(req.body.start_date, req.body.end_date, []);
   const values = fields.map((field) => {
     if (field.type === "boolean") return booleanInt(req.body[field.name]);
     if (field.type === "number") return Number(req.body[field.name]);
@@ -333,6 +335,10 @@ catalogsRouter.post("/:type", requirePermission("catalogs.manage"), (req: Authen
 catalogsRouter.patch("/:type/:id", requirePermission("catalogs.manage"), (req: AuthenticatedRequest, res) => {
   const catalog = definition(req.params.type);
   const id = asId(req.params.id, "Registro");
+  if (catalog.table === "school_cycles" && (req.body.start_date !== undefined || req.body.end_date !== undefined)) {
+    const calendar = getCycleCalendar(id);
+    validateCycleCalendar(req.body.start_date ?? calendar.activity_start, req.body.end_date ?? calendar.activity_end, calendar.vacations);
+  }
   const fields = catalog.fields.filter((field) => req.body[field.name] !== undefined);
   if (req.body.is_active !== undefined) fields.push({ name: "is_active", label: "Activo", type: "boolean" });
   if (!fields.length) throw new ApiError(400, "No hay cambios para guardar.");

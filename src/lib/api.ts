@@ -37,7 +37,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const response = await fetch(apiUrl(path), { ...options, headers, body: body as BodyInit });
   if (response.status === 401 && path !== "/auth/login") {
     setToken(null);
-    window.location.assign("/login");
+    if (!window.location.pathname.startsWith("/verificar-documento/")) window.location.assign("/login");
   }
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "No fue posible completar la solicitud." }));
@@ -67,13 +67,25 @@ export async function download(path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function openDocument(path: string) {
+export async function openDocument(path: string) {
   const token = getToken();
-  fetch(apiUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
-    .then(async (response) => {
-      if (!response.ok) throw new Error((await response.json()).message);
-      const url = URL.createObjectURL(await response.blob());
-      window.open(url, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    });
+  const preview = window.open("about:blank", "_blank");
+  if (preview) {
+    preview.opener = null;
+    preview.document.title = "Preparando documento";
+    preview.document.body.textContent = "Preparando el documento para impresión…";
+  }
+  try {
+    const response = await fetch(apiUrl(path), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+    if (!response.ok) throw new Error((await response.json()).message);
+    const url = URL.createObjectURL(await response.blob());
+    if (preview) preview.location.replace(url);
+    else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] || "documento.pdf";
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) { preview?.close(); throw error; }
 }

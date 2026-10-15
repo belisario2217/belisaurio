@@ -79,3 +79,18 @@ progress { width:100%; height:18px; accent-color:var(--section-accent); }
  .report-item { grid-template-columns:36px minmax(0,1fr); gap:10px; }
  .report-item-icon { width:36px; height:36px; }
 }
+
+/* Official school documents */
+.official-document-options { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding: 24px; border-top: 1px solid var(--line); }
+.official-document-options article { display: flex; flex-direction: column; align-items: flex-start; padding: 23px; border: 1px solid #dce3ee; border-radius: 10px; background: #fff; }
+.official-document-options article > svg { color: #172951; }
+.official-document-options h3 { font-size: 16px; margin: 16px 0 9px; }
+.official-document-options p { font-size: 13px; color: #607086; line-height: 1.7; margin: 0 0 20px; flex: 1; }
+.document-context { grid-column: 1 / -1; margin: 0 24px 20px; border-left: 3px solid #172951; background: #f3f6fa; padding: 15px 18px; font-size: 13px; display: grid; gap: 7px; }
+.document-context span { color: #607086; }
+.cycle-calendar-form { margin-bottom: 24px; }
+.cycle-calendar-hint { font-size: 13px; color: #607086; line-height: 1.7; margin: 8px 0; }
+.cycle-vacation-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 16px; align-items: end; margin: 16px 0; }
+.cycle-vacation-row > button { margin-bottom: 6px; }
+@media (max-width: 1000px) { .official-document-options { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .cycle-vacation-row { grid-template-columns: 1fr; } .cycle-vacation-row > button { justify-self: end; } }

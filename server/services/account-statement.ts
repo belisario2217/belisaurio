@@ -1,14 +1,14 @@
-import crypto from "node:crypto";
 import path from "node:path";
 import type { Response } from "express";
 import ExcelJS from "exceljs";
 import { createPdf } from "./files.js";
-import { workbookInstitutionLogo } from "./document-branding.js";
+import { pdfInstitutionalVectors, workbookInstitutionLogo } from "./document-branding.js";
 import { institutionLogoFile } from "./institution-logo.js";
+import type { IssuedDocument } from "./document-verification.js";
 
 const statementPlace = "Frontera, Centla, Tab.";
 const timeZone = "America/Mexico_City";
-const rowsPerPdfPage = 12;
+const rowsPerPdfPage = 10;
 const rowsOnWorkbookCover = 12;
 
 export type StatementInstitutionSettings = {
@@ -57,7 +57,6 @@ export type StatementAccountData = {
 
 type IssuedParts = {
   display: string;
-  compact: string;
   year: string;
 };
 
@@ -78,7 +77,6 @@ function localIssuedParts(date: Date): IssuedParts {
   const parts = Object.fromEntries(entries.map((entry) => [entry.type, entry.value]));
   return {
     display: `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`,
-    compact: `${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}`,
     year: parts.year
   };
 }
@@ -103,36 +101,11 @@ function dateValue(value: string | null | undefined) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function physicalFolio(value: string | null | undefined) {
+export function physicalFolio(value: string | null | undefined) {
   const text = value?.trim() ?? "";
   if (!/^\d{1,4}$/.test(text)) return "SIN FOLIO FÍSICO";
   const number = Number(text);
   return number >= 1 && number <= 1000 ? String(number).padStart(4, "0") : "SIN FOLIO FÍSICO";
-}
-
-function verificationCode(data: StatementAccountData, issued: IssuedParts) {
-  const studentKey = data.student.student_number
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/gi, "")
-    .toUpperCase()
-    .padEnd(6, "0")
-    .slice(0, 6);
-  const payload = JSON.stringify({
-    student: data.student.student_number,
-    issued: issued.compact,
-    paid: Number(data.billing.summary.paidAmount).toFixed(2),
-    balance: Number(data.billing.summary.balance).toFixed(2),
-    movements: data.billing.payments.map((payment) => [
-      payment.id,
-      payment.folio,
-      Number(payment.amount).toFixed(2),
-      payment.paid_at,
-      payment.updated_at
-    ])
-  });
-  const digest = crypto.createHash("sha256").update(payload).digest("hex").slice(0, 12).toUpperCase();
-  return `EC-${studentKey}-${issued.compact}-${digest}`;
 }
 
 type PdfCellOptions = {
@@ -154,16 +127,14 @@ function pdfCell(doc: PDFKit.PDFDocument, options: PdfCellOptions) {
   doc.save();
   if (options.fill) doc.rect(options.x, options.y, options.width, options.height).fillAndStroke(options.fill, border);
   else doc.rect(options.x, options.y, options.width, options.height).stroke(border);
-  doc
-    .fillColor(options.color ?? "#334155")
-    .font(options.bold ? "Helvetica-Bold" : "Helvetica")
-    .fontSize(options.fontSize ?? 8)
-    .text(String(options.text ?? ""), options.x + 5, options.y + Math.max(4, (options.height - (options.fontSize ?? 8)) / 2 - 1), {
+  doc.fillColor(options.color ?? "#334155").font(options.bold ? "Helvetica-Bold" : "Helvetica").fontSize(options.fontSize ?? 8);
+  const text = String(options.text ?? "");
+  const textHeight = doc.heightOfString(text, { width: options.width - 10 });
+  doc.text(text, options.x + 5, options.y + Math.max(3, (options.height - textHeight) / 2), {
       width: options.width - 10,
       height: options.height - 6,
       align: options.align ?? "left",
-      ellipsis: true,
-      lineBreak: false
+      ellipsis: true
     });
   doc.restore();
 }
@@ -177,6 +148,7 @@ function drawPdfHeader(
   pageNumber: number,
   pageCount: number
 ) {
+  pdfInstitutionalVectors(doc, primary);
   const logo = institutionLogoFile(settings.logo_path);
   if (logo) doc.image(logo, 44, 30, { fit: [62, 62], align: "center", valign: "center" });
   doc
@@ -195,7 +167,7 @@ function drawPdfHeader(
     doc.fillColor("#64748B").font("Helvetica").fontSize(7).text(`Página ${pageNumber} de ${pageCount}`, 500, 18, { width: 64, align: "right" });
   }
 
-  doc.rect(36, 110, 540, 32).fill(primary);
+  doc.roundedRect(36, 110, 540, 32, 3).fill(primary);
   doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(15).text("ESTADO DE CUENTA DEL ALUMNO", 36, 119, {
     width: 540,
     align: "center"
@@ -236,7 +208,7 @@ function drawPdfHeader(
 
   pdfCell(doc, {
     x: 36, y: 270, width: 540, height: 32, text: `TOTAL PAGADO  ${money(data.billing.summary.paidAmount)}`,
-    fill: "#DCFCE7", color: "#166534", border: primary, bold: true, align: "center", fontSize: 9
+    fill: "#EDF2F8", color: primary, border: "#D6DFEB", bold: true, align: "center", fontSize: 11
   });
 }
 
@@ -249,15 +221,16 @@ function drawPdfMovements(
   primary: string,
   payments: StatementPayment[],
   pageNumber: number,
-  pageCount: number
+  pageCount: number,
+  official: IssuedDocument
 ) {
   drawPdfHeader(doc, data, settings, issued, primary, pageNumber, pageCount);
   const columns = [70, 220, 82, 98, 70];
-  const headers = ["FECHA", "CONCEPTO", "MONTO", "FOLIO", "ESTADO"];
+  const headers = ["FECHA", "CONCEPTO DE PAGO", "IMPORTE", "FOLIO FÍSICO", "ESTADO"];
   let x = 36;
   for (let index = 0; index < headers.length; index += 1) {
     pdfCell(doc, {
-      x, y: 314, width: columns[index], height: 24, text: headers[index], fill: "#0F766E",
+      x, y: 314, width: columns[index], height: 24, text: headers[index], fill: primary,
       color: "#FFFFFF", border: "#D1FAE5", bold: true, align: "center", fontSize: 8
     });
     x += columns[index];
@@ -269,13 +242,13 @@ function drawPdfMovements(
       ? [displayDate(payment.paid_at), payment.concept, money(payment.amount), physicalFolio(payment.notes), "PAGADO"]
       : ["", "", "", "", ""];
     x = 36;
-    const y = 338 + row * 21;
+    const y = 338 + row * 24;
     for (let index = 0; index < values.length; index += 1) {
       pdfCell(doc, {
         x,
         y,
         width: columns[index],
-        height: 21,
+        height: 24,
         text: values[index],
         fill: row % 2 === 0 ? "#FFFFFF" : "#F8FAFC",
         color: index === 4 && payment ? "#166534" : "#334155",
@@ -302,14 +275,17 @@ function drawPdfMovements(
     ellipsis: true
   });
   doc.fontSize(8).text("CONTROL ESCOLAR", 166, 686, { width: 280, align: "center" });
+  doc.image(official.qrPng, 40, 622, { width: 74, height: 74 });
+  doc.link(40, 622, 74, 74, official.verificationUrl);
+  doc.fillColor(primary).font("Helvetica-Bold").fontSize(7).text(`FOLIO INSTITUCIONAL: ${official.folio}`, 36, 698, { width: 540, align: "center" });
 
-  doc.rect(36, 700, 540, 18).fill("#F8FAFC");
-  doc.fillColor("#64748B").font("Helvetica").fontSize(7.5).text(`${statementPlace} | Emitido: ${issued.display}`, 36, 705, {
+  doc.rect(36, 712, 540, 18).fill("#F8FAFC");
+  doc.fillColor("#64748B").font("Helvetica").fontSize(7.5).text(`${statementPlace} | Emitido: ${issued.display}`, 36, 717, {
     width: 540,
     align: "center"
   });
-  doc.rect(36, 720, 540, 22).fill(primary);
-  doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(7.6).text(`CÓDIGO DE VERIFICACIÓN SHA-256: ${code}`, 40, 727, {
+  doc.rect(36, 732, 540, 20).fill(primary);
+  doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(7.1).text(`CÓDIGO DE VERIFICACIÓN SHA-256: ${code}`, 40, 738, {
     width: 532,
     align: "center",
     ellipsis: true
@@ -317,24 +293,26 @@ function drawPdfMovements(
   doc.fillColor("#64748B").font("Helvetica-Oblique").fontSize(6.5).text(
     `${settings.footer_text || "Documento emitido por Control Escolar."} | Página ${pageNumber} de ${pageCount}`,
     36,
-    745,
-    { width: 540, height: 8, align: "center", ellipsis: true, lineBreak: false }
+    758,
+    { width: 540, height: 22, align: "center", ellipsis: true }
   );
 }
 
 export function sendAccountStatementPdf(
   res: Response,
   data: StatementAccountData,
-  settings: StatementInstitutionSettings
+  settings: StatementInstitutionSettings,
+  official: IssuedDocument
 ) {
-  const issued = localIssuedParts(new Date());
-  const code = verificationCode(data, issued);
+  const issued = localIssuedParts(new Date(official.issuedAt));
+  const code = `EC-${official.fingerprint.toUpperCase()}`;
   const primary = normalizedHex(settings.primary_color, "#17324D");
-  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margin: 36, bufferPages: true }, false);
+  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margins: { top: 36, bottom: 12, left: 36, right: 36 }, bufferPages: true }, false);
+  doc.info.Author = settings.institution_name; doc.info.Title = "Estado de cuenta del alumno";
   const payments = data.billing.payments;
   const pageCount = Math.max(1, Math.ceil(payments.length / rowsPerPdfPage));
   for (let page = 0; page < pageCount; page += 1) {
-    if (page > 0) doc.addPage({ size: "LETTER", margin: 36 });
+    if (page > 0) doc.addPage({ size: "LETTER", margins: { top: 36, bottom: 12, left: 36, right: 36 } });
     drawPdfMovements(
       doc,
       data,
@@ -344,7 +322,8 @@ export function sendAccountStatementPdf(
       primary,
       payments.slice(page * rowsPerPdfPage, (page + 1) * rowsPerPdfPage),
       page + 1,
-      pageCount
+      pageCount,
+      official
     );
   }
   doc.end();
@@ -411,7 +390,8 @@ function buildStatementCover(
   data: StatementAccountData,
   settings: StatementInstitutionSettings,
   issued: IssuedParts,
-  code: string
+  code: string,
+  official: IssuedDocument
 ) {
   const pageCount = Math.max(1, Math.ceil(data.billing.payments.length / rowsOnWorkbookCover));
   const lastPrintRow = pageCount * 36;
@@ -431,11 +411,12 @@ function buildStatementCover(
   });
   const primary = normalizedHex(settings.primary_color, "#17324D");
   const primaryArgb = argb(primary);
-  const tealArgb = argb("#0F766E");
+  const tealArgb = primaryArgb;
   const border = thinBorder();
   const navyFont: Partial<ExcelJS.Font> = { name: "Aptos", color: { argb: primaryArgb } };
   [12, 15, 15, 15, 14, 14, 15, 15].forEach((width, index) => { worksheet.getColumn(index + 1).width = width; });
   const imageId = workbookLogo(workbook, settings);
+  const qrImageId = workbook.addImage({ buffer: official.qrPng, extension: "png" });
   const labelFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF2F8" } };
   const labelStyle: Partial<ExcelJS.Style> = {
     fill: labelFill,
@@ -585,6 +566,15 @@ function buildStatementCover(
       font: { name: "Aptos", size: 9, color: { argb: "FF334155" } },
       alignment: { horizontal: "center", vertical: "middle" }
     });
+    worksheet.addImage(qrImageId, { tl: { col: 6.25, row: rowOffset + 28.1 }, ext: { width: 72, height: 72 } });
+    mergedValue(worksheet, rangeAt("A", "B", 30), "VALIDACIÓN INSTITUCIONAL", {
+      font: { name: "Aptos", size: 7, bold: true, color: { argb: primaryArgb } },
+      alignment: { horizontal: "center", vertical: "middle", wrapText: true }
+    });
+    mergedValue(worksheet, rangeAt("A", "B", 31), { text: official.folio, hyperlink: official.verificationUrl }, {
+      font: { name: "Aptos", size: 7, color: { argb: primaryArgb } },
+      alignment: { horizontal: "center", vertical: "middle", wrapText: true }
+    });
     mergedValue(worksheet, rangeAt("A", "H", 34), `${statementPlace} | Emitido: ${issued.display}`, {
       fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } },
       font: { name: "Aptos", size: 8, color: { argb: "FF64748B" } },
@@ -697,10 +687,11 @@ function buildMovementsSheet(
 export async function sendAccountStatementWorkbook(
   res: Response,
   data: StatementAccountData,
-  settings: StatementInstitutionSettings
+  settings: StatementInstitutionSettings,
+  official: IssuedDocument
 ) {
-  const issued = localIssuedParts(new Date());
-  const code = verificationCode(data, issued);
+  const issued = localIssuedParts(new Date(official.issuedAt));
+  const code = `EC-${official.fingerprint.toUpperCase()}`;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = settings.institution_name || "Control Escolar";
   workbook.company = settings.institution_name || "Instituto de Formación Profesional S.C.";
@@ -709,7 +700,7 @@ export async function sendAccountStatementWorkbook(
   workbook.created = new Date();
   workbook.modified = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  buildStatementCover(workbook, data, settings, issued, code);
+  buildStatementCover(workbook, data, settings, issued, code, official);
   buildMovementsSheet(workbook, data, settings, issued, code);
   const buffer = await workbook.xlsx.writeBuffer();
   res
