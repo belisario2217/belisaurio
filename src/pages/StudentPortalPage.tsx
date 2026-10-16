@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, Field, StatusBadge } from "../components/Ui";
+import { displayProgramName } from "../../shared/program-name";
 
 type PortalData = {
   student: {
@@ -139,7 +140,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
         <div>
           <span>{student.level_name} - {student.cycle_name}</span>
           <h2>{student.student_name}</h2>
-          <p>{student.student_number} - {student.program_name} - Grupo {student.group_name}</p>
+          <p>{student.student_number} - {displayProgramName(student.program_name)} - Grupo {student.group_name}</p>
         </div>
         <div>
           <span>Plan academico</span>

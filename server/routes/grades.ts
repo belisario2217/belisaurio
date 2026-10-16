@@ -11,6 +11,7 @@ import { syncGroupSubjects } from "../services/group-subjects.js";
 import { evaluationEligibility } from "../services/evaluation-eligibility.js";
 import { assertTeacherAssignment, isTeacherUser, teacherIdForUser } from "../services/teacher-scope.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 type GradePreview = {
   userId: number;
@@ -693,7 +694,7 @@ gradesRouter.get("/export/file", requirePermission("grades.export"), (req: Authe
      JOIN teachers t ON t.id = a.teacher_id JOIN academic_periods ap ON ap.id = a.period_id
      WHERE ${clauses.join(" AND ")} ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name), spanish_sort(s.name)`,
     ...params
-  );
+  ).map(row => ({ ...row, Programa: displayProgramName(row.Programa) }));
   const format = String(req.query.format ?? "xlsx");
   if (format === "csv") {
     const headers = Object.keys(records[0] ?? {});

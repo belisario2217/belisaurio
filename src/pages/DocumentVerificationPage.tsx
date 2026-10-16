@@ -4,6 +4,7 @@ import { ArrowRight, FileCheck2, LoaderCircle, RefreshCw, ShieldCheck, ShieldX }
 import { api } from "../lib/api";
 import { InstitutionLogo } from "../components/InstitutionLogo";
 import type { PublicDocumentVerification } from "../../shared/official-document";
+import { displayProgramName } from "../../shared/program-name";
 import "../document-verification.css";
 
 function issuedDate(value: string) {
@@ -56,7 +57,7 @@ export function DocumentVerificationPage() {
               <div className="verification-wide"><dt>Alumno</dt><dd>{document.student.name}</dd></div>
               <div><dt>Matrícula</dt><dd>{document.student.number}</dd></div>
               <div><dt>Fecha de emisión · Ciudad de México</dt><dd>{issuedDate(document.issuedAt)}</dd></div>
-              <div className="verification-wide"><dt>Programa académico</dt><dd>{document.student.program}</dd></div>
+              <div className="verification-wide"><dt>Programa académico</dt><dd>{displayProgramName(document.student.program)}</dd></div>
               <div><dt>Semestre al emitir</dt><dd>{document.student.semesterName}</dd></div>
               <div><dt>Ciclo escolar al emitir</dt><dd>{document.student.cycle}</dd></div>
               <div><dt>Grupo / turno</dt><dd>{document.student.group} · {document.student.shift}</dd></div>

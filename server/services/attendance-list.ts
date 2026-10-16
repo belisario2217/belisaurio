@@ -5,6 +5,7 @@ import { all, get } from "../db.js";
 import { ApiError } from "../utils.js";
 import { createPdf } from "./files.js";
 import { institutionLogoFile } from "./institution-logo.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 const studentsPerPage = 19;
 const attendanceColumns = 19;
@@ -249,7 +250,7 @@ function buildAttendanceSheet(
       font: { ...baseFont, size: 10, bold }
     });
   };
-  setInfo("A7:C7", "NOMBRE DEL CURSO:", "D7:F7", page.context.program_name);
+  setInfo("A7:C7", "NOMBRE DEL CURSO:", "D7:F7", displayProgramName(page.context.program_name));
   setInfo("G7:I7", "ALCANCE:", "J7:O7", "TODAS LAS MATERIAS");
   setInfo("P7:T7", "SEMESTRE Y GRUPO:", "U7:X7", page.context.group_name, true);
   setInfo("A8:C8", "RESPONSABLE:", "D8:F8", "");
@@ -375,7 +376,7 @@ function drawAttendancePdfPage(
   const labelWidth = 92;
   const y1 = 94;
   pdfCell(doc, left, y1, labelWidth, fieldHeight, "NOMBRE DEL CURSO:", { size: 6.4 });
-  pdfCell(doc, left + labelWidth, y1, 176, fieldHeight, page.context.program_name, { size: 7 });
+  pdfCell(doc, left + labelWidth, y1, 176, fieldHeight, displayProgramName(page.context.program_name), { size: 7 });
   pdfCell(doc, left + 268, y1, 56, fieldHeight, "ALCANCE:", { size: 6.4 });
   pdfCell(doc, left + 324, y1, 226, fieldHeight, page.context.subject_name ?? "POR ASIGNAR", { size: 7 });
   pdfCell(doc, left + 550, y1, 94, fieldHeight, "SEMESTRE Y GRUPO:", { size: 6 });

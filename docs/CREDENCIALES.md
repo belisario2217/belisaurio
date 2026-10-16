@@ -82,6 +82,12 @@ silenciosamente la vigencia de un PDF emitido.
 
 ## Personalización e impresión
 
+El programa se presenta como **Licenciatura en Enfermería**, sin los sufijos IFOP
+o UNITEN, tanto en las vistas como en el PDF y la consulta del QR. La corrección
+también se aplica al volver a descargar credenciales ya aprobadas: conserva la
+fotografía, el folio, el QR y las fechas originales, sin requerir otra activación.
+Los datos internos de la emisión permanecen intactos para comprobar su identidad.
+
 En **Personalizar diseño** puedes cambiar colores, franja lateral, textos, campus,
 contactos, nombre y cargo de quien autoriza, y cargar una firma autorizada opcional.
 Sin firma digital se mantiene el espacio para firma y sello. El logo se configura en

@@ -10,6 +10,7 @@ import { getAcademicRecord } from "../services/academic-record.js";
 import { drawAcademicDocument, printedSubjects, publicAcademicStudent } from "../services/academic-documents.js";
 import { issueDocument, type IssuedDocument } from "../services/document-verification.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 export const reportsRouter = Router();
 
@@ -62,7 +63,7 @@ function studentListRows(groupId?: number, fields = defaultStudentListFields) {
      WHERE (? IS NULL OR e.group_id = ?)
      ORDER BY COALESCE(g.name, ''), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     groupId ?? null, groupId ?? null
-  );
+  ).map(row => fields.includes("programa") ? { ...row, programa: displayProgramName(row.programa) } : row);
 }
 
 function ensureAcademicPeriod(cycleId: number) {
@@ -682,7 +683,8 @@ reportsRouter.get("/data/:type", requirePermission("reports.view"), async (req, 
     sendAttendancePdf(res, groupId, req.query.mode, req.query.month);
     return;
   }
-  const records = all<any>(definition.query, groupId, groupId);
+  const records = all<any>(definition.query, groupId, groupId)
+    .map(row => typeof row.Programa === "string" ? { ...row, Programa: displayProgramName(row.Programa) } : row);
   if (req.query.format === "xlsx") return sendWorkbook(res, `${req.params.type}.xlsx`, "Reporte", records);
   const doc = createPdf(res, `${req.params.type}.pdf`, { layout: "landscape" });
   doc.fillColor("#102a43").font("Helvetica-Bold").fontSize(18).text(definition.title);
