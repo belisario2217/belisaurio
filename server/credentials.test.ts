@@ -293,6 +293,71 @@ describe("Student credentials", () => {
     expect(getCredentialState(f.student).status).toBe("inactive");
   });
 
+  it.each(["IFOP", "UNITEN"])("displays only the degree for the %s program in previews, downloads and QR without losing identity checks", async institution => {
+    const f = fixture(), name = `Licenciatura en Enfermería ${institution}`;
+    const program = Number(run("INSERT INTO programs(code,name) VALUES(?,?)", `DISPLAY-${sequence}`, name).lastInsertRowid);
+    run("UPDATE groups SET program_id=? WHERE id=?", program, f.group);
+    run("UPDATE enrollments SET program_id=? WHERE id=?", program, f.enrollment);
+    expect(getCredentialState(f.student).student.program).toBe("Licenciatura en Enfermería");
+    await photo(f.student);
+    const preview = await adminGet(`/students/${f.student}/preview.pdf`).buffer(true).parse(binary).expect(200);
+    expect((await pdfText(preview.body))[0]).toContain("LICENCIATURA EN ENFERMERÍA");
+    const activated = await activate(f.student);
+    expect(activated.status).toBe(200); expect(activated.body.canDownload).toBe(true);
+    expect(activated.body.issue.snapshot.student.program).toBe("Licenciatura en Enfermería");
+    const issue = latestCredentialIssue(f.student)!;
+    expect(JSON.parse(issue.snapshot_json).student.program).toBe(name);
+    expect((await request(app).get(`/api/credentials/verify/${issue.token}`).expect(200)).body.document.student.program).toBe("Licenciatura en Enfermería");
+    for (const layout of ["card", "letter"]) {
+      const downloaded = await adminGet(`/students/${f.student}/pdf?layout=${layout}`).buffer(true).parse(binary).expect(200);
+      const pages = await pdfText(downloaded.body);
+      expect(pages[0]).toContain("LICENCIATURA EN ENFERMERÍA");
+      expect(pages.join(" ")).not.toMatch(/ENFERMERÍA\s+(?:IFOP|UNITEN)/);
+    }
+    run("UPDATE programs SET name=? WHERE id=?", `Licenciatura en Enfermería ${institution === "IFOP" ? "UNITEN" : "IFOP"}`, program);
+    expect(getCredentialState(f.student).status).toBe("needs_review");
+    await request(app).get("/api/portal/credential.pdf").set("Authorization", f.auth()).expect(403);
+  }, 20_000);
+
+  it("cleans program labels in already approved v2 downloads while retaining the original snapshot, QR and approval", async () => {
+    const f = fixture(), name = "Licenciatura en Enfermería UNITEN";
+    const program = Number(run("INSERT INTO programs(code,name) VALUES(?,?)", `OLD-DISPLAY-${sequence}`, name).lastInsertRowid);
+    run("UPDATE groups SET program_id=? WHERE id=?", program, f.group);
+    run("UPDATE enrollments SET program_id=? WHERE id=?", program, f.enrollment);
+    await photo(f.student); await activate(f.student);
+    const previous = latestCredentialIssue(f.student)!, snapshot = JSON.parse(previous.snapshot_json) as CredentialSnapshot;
+    const id = crypto.randomUUID(), token = crypto.randomBytes(24).toString("hex"), folio = `CEST-V2-${sequence}`;
+    snapshot.folio = folio;
+    const url = `https://escuela.example.test/verificar-credencial/${token}`;
+    const legacyDoc = new PDFDocument(), chunks: Buffer[] = [];
+    const legacyCompleted = new Promise<Buffer>(resolve => {
+      legacyDoc.on("data", chunk => chunks.push(Buffer.from(chunk)));
+      legacyDoc.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+    legacyDoc.text(name.toLocaleUpperCase("es-MX")); legacyDoc.end();
+    const original = await legacyCompleted;
+    const card = `issues/${id}-card-v2.pdf`, print = `issues/${id}-print-v2.pdf`;
+    fs.writeFileSync(credentialFile(card), original); fs.writeFileSync(credentialFile(print), original);
+    const json = JSON.stringify(snapshot), fingerprint = hash(Buffer.from(json));
+    run("UPDATE credential_issues SET revoked_at=? WHERE id=?", new Date().toISOString(), previous.id);
+    run(`INSERT INTO credential_issues(id,token,folio,student_id,photo_file,card_file,print_file,snapshot_json,snapshot_hash,verification_url,issued_by,issued_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, token, folio, f.student, previous.photo_file, card, print, json, fingerprint, url, admin, previous.issued_at);
+    expect(getCredentialState(f.student)).toMatchObject({ status: "active", canDownload: true, issue: { folio, snapshot: { student: { program: "Licenciatura en Enfermería" } } } });
+    const staff = await adminGet(`/students/${f.student}/pdf`).buffer(true).parse(binary).expect(200);
+    const own = await request(app).get("/api/portal/credential.pdf").set("Authorization", f.auth()).buffer(true).parse(binary).expect(200);
+    expect(own.body).toEqual(staff.body); expect(staff.body).not.toEqual(original);
+    const letter = await adminGet(`/students/${f.student}/pdf?layout=letter`).buffer(true).parse(binary).expect(200);
+    for (const buffer of [staff.body, letter.body]) {
+      const text = (await pdfText(buffer)).join(" ");
+      expect(text).toContain("LICENCIATURA EN ENFERMERÍA"); expect(text).not.toContain("UNITEN");
+      expect(buffer.toString("latin1")).toContain(url);
+    }
+    const verified = await request(app).get(`/api/credentials/verify/${token}`).expect(200);
+    expect(verified.body).toMatchObject({ status: "active", verificationUrl: url, document: { folio, issuedAt: snapshot.issuedAt, validity: snapshot.validity, student: { program: "Licenciatura en Enfermería" } } });
+    expect(latestCredentialIssue(f.student)).toMatchObject({ id, token, folio, snapshot_json: json, snapshot_hash: fingerprint, issued_at: previous.issued_at, revoked_at: null });
+    expect(fs.readFileSync(credentialFile(card))).toEqual(original); expect(fs.readFileSync(credentialFile(print))).toEqual(original);
+  }, 20_000);
+
   it("keeps approved PDFs unchanged when the design changes and applies customization on the next activation", async () => {
     const f = fixture(); await photo(f.student); await activate(f.student); const issue = latestCredentialIssue(f.student)!;
     const original = fs.readFileSync(credentialFile(issue.card_file));

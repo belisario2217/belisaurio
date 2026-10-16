@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { get, run } from "../db.js";
 import { ApiError } from "../utils.js";
 import type { OfficialDocumentSnapshot, OfficialDocumentType, PublicDocumentVerification } from "../../shared/official-document.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 const titles: Record<OfficialDocumentType, string> = {
   report_card: "Boleta de calificaciones", academic_history: "Historial académico",
@@ -56,7 +57,7 @@ export async function issueDocument(type: OfficialDocumentType, studentId: numbe
     version: 1, folio, type, title: studentCopy ? "Boleta del alumno" : titles[type], issuedAt,
     institution: { name: settings.institution_name, campus: "Campus Frontera", logoPath: settings.logo_path,
       directorName: studentCopy ? "" : settings.director_name || "Responsable de Control Escolar", address: settings.address || "", footer: settings.footer_text || "" },
-    student, content
+    student: { ...student, program: displayProgramName(student.program) }, content
   };
   const json = JSON.stringify(snapshot);
   const fingerprint = crypto.createHash("sha256").update(json).digest("hex");

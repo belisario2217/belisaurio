@@ -2,10 +2,11 @@ import type { AcademicRecord, AcademicStudent, AcademicSubject } from "./academi
 import { documentBranding } from "./document-branding.js";
 import { issuedDisplayDate, type IssuedDocument } from "./document-verification.js";
 import type { OfficialDocumentSnapshot, PrintedSubject } from "../../shared/official-document.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 export function publicAcademicStudent(student: AcademicStudent): OfficialDocumentSnapshot["student"] {
   return {
-    name: student.student_name, number: student.student_number, program: student.program_name,
+    name: student.student_name, number: student.student_number, program: displayProgramName(student.program_name),
     group: student.group_name, shift: student.shift_name, semester: student.curricular_period_number,
     semesterName: student.curricular_period_name || `Semestre ${student.curricular_period_number}`, cycle: student.cycle_name
   };
@@ -32,7 +33,7 @@ export function drawAcademicHeader(doc: PDFKit.PDFDocument, student: AcademicStu
   doc.moveDown(.8);
   const fields = [
     ["ALUMNO", student.student_name, "MATRÍCULA", student.student_number],
-    ["PROGRAMA ACADÉMICO", student.program_name, "GRUPO / TURNO", `${student.group_name} · ${student.shift_name}`],
+    ["PROGRAMA ACADÉMICO", displayProgramName(student.program_name), "GRUPO / TURNO", `${student.group_name} · ${student.shift_name}`],
     ["SEMESTRE ACTUAL", student.curricular_period_name || `Semestre ${student.curricular_period_number}`, "CICLO ESCOLAR ACTIVO", student.cycle_name]
   ];
   for (const [label, value, rightLabel, rightValue] of fields) {

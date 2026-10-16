@@ -1,5 +1,14 @@
 # Documentos oficiales y validación por QR
 
+## Nombre del programa
+
+Los documentos, sus consultas de validación y las listas exportadas presentan el
+programa como **Licenciatura en Enfermería**, sin añadir IFOP ni UNITEN al nombre
+del grado. Se conservan los nombres internos de los catálogos y de los planes.
+La constancia mantiene la autoridad, el RVOE y la clave institucional que le
+correspondan: esta presentación no modifica el convenio UNITEN ni el RVOE propio
+de IFOP. Los registros y las huellas de documentos ya emitidos no se reescriben.
+
 ## Contenido de cada documento
 
 | Documento | Contenido |

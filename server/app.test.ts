@@ -49,9 +49,9 @@ describe("Aula Nova API", () => {
     expect(branding.status).toBe(200);
     expect(branding.body.institution_name).toBeTruthy();
     expect(branding.body.logo_path).toBe("/assets/campus-frontera.jpg");
-    expect(certificateProgramName("LICENCIATURA EN ENFERMERÍA IFOP")).toBe("LICENCIATURA EN ENFERMERÍA");
-    expect(certificateProgramName("LICENCIATURA EN ENFERMERÍA UNITEN")).toBe("LICENCIATURA EN ENFERMERÍA");
-    expect(certificateProgramName("LICENCIATURA EN ENFERMER?A IFOP")).toBe("LICENCIATURA EN ENFERMERÍA");
+    expect(certificateProgramName("LICENCIATURA EN ENFERMERÍA IFOP")).toBe("Licenciatura en Enfermería");
+    expect(certificateProgramName("LICENCIATURA EN ENFERMERÍA UNITEN")).toBe("Licenciatura en Enfermería");
+    expect(certificateProgramName("LICENCIATURA EN ENFERMER?A IFOP")).toBe("Licenciatura en Enfermería");
     expect(repairAcademicAccents("Patolog?a M?dico Quir?rgica e Ingl?s T?cnico")).toBe("Patología Médico Quirúrgica e Inglés Técnico");
 
     const response = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${token}`);

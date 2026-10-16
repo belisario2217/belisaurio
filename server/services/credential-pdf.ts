@@ -8,7 +8,7 @@ import { credentialDimensions, type CredentialSnapshot } from "../../shared/cred
 import { institutionLogoFile } from "./institution-logo.js";
 import { credentialFile } from "./credentials.js";
 
-export const credentialPdfVersion = 2;
+export const credentialPdfVersion = 3;
 
 async function originalImageData(file: string) {
   const buffer = fs.readFileSync(file), metadata = await sharp(buffer, { limitInputPixels: 40_000_000 }).metadata();

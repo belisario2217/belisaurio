@@ -5,6 +5,7 @@ import { createPdf } from "./files.js";
 import { pdfInstitutionalVectors, workbookInstitutionLogo } from "./document-branding.js";
 import { institutionLogoFile } from "./institution-logo.js";
 import type { IssuedDocument } from "./document-verification.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 const statementPlace = "Frontera, Centla, Tab.";
 const timeZone = "America/Mexico_City";
@@ -192,7 +193,7 @@ function drawPdfHeader(
   value(156, infoY + rowHeight, 420, data.student.student_name);
 
   label(36, infoY + rowHeight * 2, 120, "PROGRAMA");
-  value(156, infoY + rowHeight * 2, 150, data.student.program_name);
+  value(156, infoY + rowHeight * 2, 150, displayProgramName(data.student.program_name));
   label(306, infoY + rowHeight * 2, 110, "MODALIDAD / TURNO");
   value(416, infoY + rowHeight * 2, 160, data.student.shift_name);
 
@@ -481,7 +482,7 @@ function buildStatementCover(
     setInfo(["A", "B"], "MATRÍCULA", ["C", "D"], 7, data.student.student_number, true);
     setInfo(["E", "F"], "FECHA / HORA", ["G", "H"], 7, issued.display, true);
     setInfo(["A", "B"], "NOMBRE COMPLETO", ["C", "H"], 8, data.student.student_name);
-    setInfo(["A", "B"], "PROGRAMA", ["C", "D"], 9, data.student.program_name);
+    setInfo(["A", "B"], "PROGRAMA", ["C", "D"], 9, displayProgramName(data.student.program_name));
     setInfo(["E", "F"], "MODALIDAD / TURNO", ["G", "H"], 9, data.student.shift_name);
     setInfo(["A", "B"], "SEMESTRE / PERIODO", ["C", "D"], 10, data.student.current_period ?? "-");
     setInfo(["E", "F"], "CICLO ESCOLAR", ["G", "H"], 10, data.student.cycle_name);
@@ -626,7 +627,7 @@ function buildMovementsSheet(
   worksheet.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};
   const movementsLogo=workbookInstitutionLogo(workbook);
   if(movementsLogo!==null)worksheet.addImage(movementsLogo,{tl:{col:.1,row:.1},ext:{width:64,height:64}});
-  mergedValue(worksheet, "A2:H2", `${data.student.student_number} | ${data.student.student_name} | ${data.student.program_name}`, {
+  mergedValue(worksheet, "A2:H2", `${data.student.student_number} | ${data.student.student_name} | ${displayProgramName(data.student.program_name)}`, {
     fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDF3F0" } },
     font: { name: "Aptos", italic: true, size: 9, color: { argb: "FF334155" } },
     alignment: { horizontal: "left", vertical: "middle" }

@@ -8,6 +8,7 @@ import { syncEnrollmentGroupSubjects } from "../services/group-subjects.js";
 import { provisionStudentAccount } from "../services/student-account.js";
 import { generateStudentIdentity } from "../services/student-identity.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 type StudentImportRow = {
   row: number;
@@ -717,7 +718,7 @@ studentsRouter.get("/export/file", requirePermission("students.export"), (req, r
   const rows = records.map((student) => ({
     Matrícula: student.student_number,
     Alumno: student.full_name,
-    Programa: student.program_name,
+    Programa: displayProgramName(student.program_name || ""),
     Turno: student.shift_name,
     Grupo: student.group_name,
     Ciclo: student.cycle_name,

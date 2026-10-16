@@ -70,6 +70,64 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
+  it("uses only the academic degree in report cards, histories and their QR snapshots without renaming either plan", async () => {
+    for (const suffix of ["IFOP", "UNITEN"]) {
+      const f = fixture(), programName = `LICENCIATURA EN ENFERMERIA ${suffix}`;
+      run("UPDATE programs SET name=? WHERE id=?", programName, f.program);
+      const originalPlan = get("SELECT * FROM academic_plans WHERE id=?", f.plan);
+      for (const document of ["report-card", "academic-history"]) {
+        const response = await download(`/reports/${document}.pdf?studentId=${f.student}`);
+        expect(response.status).toBe(200);
+        const text = (await pdfPages(response.body)).join(" ");
+        expect(text).toContain("Licenciatura en Enfermería");
+        expect(text).not.toContain(programName);
+        expect(text).not.toMatch(/Licenciatura en Enfermería (?:IFOP|UNITEN)/);
+        const issued = lastIssued(f.student);
+        const verified = await request(app).get(`/api/documents/verify/${issued.token}`).expect(200);
+        expect(verified.body.document.student.program).toBe("Licenciatura en Enfermería");
+        expect(JSON.parse(issued.snapshot_json).student.program).toBe("Licenciatura en Enfermería");
+      }
+      expect(get<{name:string}>("SELECT name FROM programs WHERE id=?", f.program)!.name).toBe(programName);
+      expect(get("SELECT * FROM academic_plans WHERE id=?", f.plan)).toEqual(originalPlan);
+      expect(getAcademicRecord(f.student, "report_card").student.program_name).toBe(programName);
+    }
+  });
+
+  it("prints the clean degree in attendance lists and student exports without changing catalog or import names", async () => {
+    const f = fixture(), programName = "Licenciatura en Enfermería IFOP";
+    run("UPDATE programs SET name=? WHERE id=?", programName, f.program);
+    const teacher = get<{id:number}>("SELECT id FROM teachers LIMIT 1")!.id;
+    const scale = get<{id:number}>("SELECT id FROM grading_scales LIMIT 1")!.id;
+    const assignment = Number(run("INSERT INTO subject_assignments(subject_id,group_id,teacher_id,period_id,grading_scale_id,evaluation_mode) VALUES(?,?,?,?,?,'partials')", f.subjects[2], f.group, teacher, f.period, scale).lastInsertRowid);
+    run("INSERT INTO grades(enrollment_id,assignment_id,partial_1,status) VALUES(?,?,8,'pending')", f.enrollment, assignment);
+    for (const url of [
+      `/reports/data/attendance?groupId=${f.group}&format=xlsx`,
+      `/reports/student-list?groupId=${f.group}&format=xlsx`,
+      `/reports/data/students?groupId=${f.group}&format=xlsx`,
+      "/students/export/file?format=xlsx",
+      `/grades/export/file?studentId=${f.student}&format=xlsx`
+    ]) {
+      const response = await download(url);
+      expect(response.status).toBe(200);
+      const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(response.body);
+      const cells: string[] = [];
+      workbook.eachSheet(sheet => sheet.eachRow(row => row.eachCell(cell => cells.push(String(cell.value)))));
+      expect(cells.join(" "), url).toContain("Licenciatura en Enfermería");
+      expect(cells.join(" "), url).not.toContain(programName);
+    }
+    for (const url of [
+      `/reports/data/attendance?groupId=${f.group}&format=pdf`,
+      `/reports/student-list?groupId=${f.group}&format=pdf`
+    ]) {
+      const response = await download(url);
+      expect(response.status).toBe(200);
+      const text = (await pdfPages(response.body)).join(" ");
+      expect(text, url).toContain("Licenciatura en Enfermería");
+      expect(text, url).not.toContain(programName);
+    }
+    expect(get<{name:string}>("SELECT name FROM programs WHERE id=?", f.program)!.name).toBe(programName);
+  });
+
   it("prints only the student's current semester in individual and group report cards", async () => {
     for (const semester of [1, 2, 3]) {
       const f = fixture(semester);
@@ -316,6 +374,7 @@ describe("Official documents", () => {
 
   it("embeds a readable QR in the printed workbook linked to the exact statement amounts and physical folios", async () => {
     const f = fixture();
+    run("UPDATE programs SET name='Licenciatura en Enfermería UNITEN' WHERE id=?", f.program);
     run("INSERT INTO student_payments(student_id,enrollment_id,folio,amount,paid_at,concept,notes) VALUES(?,?,'INTERNAL-ONLY-TEST',1500,'2026-10-15','Inscripción',' 0043 ')", f.student, f.enrollment);
     const response = await download(`/payments/student/${f.student}/statement?format=xlsx`);
     expect(response.status).toBe(200);
@@ -329,11 +388,20 @@ describe("Official documents", () => {
     expect(decoded).toBe(issued.verification_url);
     const verified = await request(app).get(`/api/documents/verify/${issued.token}`);
     expect(verified.body.document.content.totalPaid).toBe(1500);
+    expect(verified.body.document.student.program).toBe("Licenciatura en Enfermería");
     expect(verified.body.document.content.payments).toEqual([{ date: "2026-10-15", concept: "Inscripción", amount: 1500, folio: "0043" }]);
     const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(response.body);
+    expect(workbook.worksheets[0].getCell("C9").value).toBe("Licenciatura en Enfermería");
+    expect(String(workbook.worksheets[1].getCell("A2").value)).toContain("Licenciatura en Enfermería");
+    expect(String(workbook.worksheets[1].getCell("A2").value)).not.toContain("UNITEN");
     expect(workbook.worksheets[0].getCell("A31").value).toMatchObject({ text: issued.folio, hyperlink: decoded });
     expect(workbook.worksheets[0].getCell("F16").value).toBe("0043");
     expect(String(workbook.worksheets[0].getCell("A35").value)).toBe(`CÓDIGO DE VERIFICACIÓN SHA-256: EC-${verified.body.fingerprint.toUpperCase()}`);
+    const pdf = await download(`/payments/student/${f.student}/statement?format=pdf`);
+    expect(pdf.status).toBe(200);
+    const text = (await pdfPages(pdf.body)).join(" ");
+    expect(text).toContain("Licenciatura en Enfermería");
+    expect(text).not.toContain("Licenciatura en Enfermería UNITEN");
   });
 
   it("repeats identity, headings and footer safely on multi-page histories", async () => {

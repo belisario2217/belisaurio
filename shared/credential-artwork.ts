@@ -1,4 +1,5 @@
 import { credentialDimensions, type CredentialSnapshot } from "./credentials.js";
+import { displayProgramName } from "./program-name.js";
 
 type Measure = (text: string, size: number, bold: boolean) => number;
 export type TextFit = { lines: string[]; size: number; lineHeight: number };
@@ -91,7 +92,7 @@ export function credentialSvg(snapshot: CredentialSnapshot, side: "front" | "bac
       text("FOTOGRAFÍA", 462, 650, 320, 30, 22, primary);
     }
     text(student.name.toLocaleUpperCase("es-MX"), 285, 767, 675, 100, 44, "#FFFFFF", true);
-    text(student.program.toLocaleUpperCase("es-MX"), 290, 876, 665, 74, 31, light, true);
+    text(displayProgramName(student.program).toLocaleUpperCase("es-MX"), 290, 876, 665, 74, 31, light, true);
     text(student.number, 300, 958, 645, 48, 34, "#FFFFFF", true);
     const qrSize = 350, qrX = 447, qrY = height - 475;
     parts.push(`<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" rx="16" fill="#FFFFFF"/>`);

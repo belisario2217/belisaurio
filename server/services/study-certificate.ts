@@ -8,6 +8,7 @@ import { issueDocument, type IssuedDocument } from "./document-verification.js";
 import { drawDocumentValidation, ensureDocumentSpace, printedSubjects, publicAcademicStudent } from "./academic-documents.js";
 import { ApiError } from "../utils.js";
 import { inferCertificateAuthority, planCertification, type PlanCertification } from "../../shared/plan-certification.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 type CertificateSettings = {
   institution_name: string; director_name: string | null;
@@ -73,7 +74,7 @@ function semesterLabel(number: number | null, configuredName?: string | null) {
 }
 
 export function certificateProgramName(value: string) {
-  return repairAcademicAccents(value).replace(/(?:\s+(?:IFOP|UNITEN))+\s*$/i, "").trim();
+  return displayProgramName(repairAcademicAccents(value));
 }
 
 const academicAccentRepairs: Array<[RegExp, string]> = [

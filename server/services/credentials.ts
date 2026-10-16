@@ -10,6 +10,7 @@ import { validCalendarDate } from "./academic-calendar.js";
 import { defaultCredentialTemplate, type CredentialFraming, type CredentialPhotoSubmission, type CredentialSnapshot, type CredentialState, type CredentialStatus, type CredentialStudent, type CredentialTemplate, type CredentialValidity, type CredentialVerification } from "../../shared/credentials.js";
 import { buildCredentialPdf, credentialPdfVersion } from "./credential-pdf.js";
 import { prepareCredentialPhoto } from "./credential-photo-preparation.js";
+import { displayProgramName } from "../../shared/program-name.js";
 
 const vault = path.join(path.dirname(databasePath), "credentials");
 type Profile = { student_id: number; photo_file: string; photo_width: number; photo_height: number; photo_hash: string; crop_x: number; crop_y: number; zoom: number; valid_until: string | null; revision: number };
@@ -51,6 +52,14 @@ export function credentialStudent(studentId: number): CredentialStudent {
   return { id: row.id, name: row.name, number: row.number, program: row.program, group: row.group_name, cycle: row.cycle,
     cycleId: row.cycle_id, cycleStart: row.cycle_start, cycleEnd: row.cycle_end,
     active: !!row.is_active && !row.is_terminal, enrolled: row.enrollment_id != null, logoPath: row.logo_path };
+}
+
+function displayCredentialStudent(student: CredentialStudent): CredentialStudent {
+  return { ...student, program: displayProgramName(student.program) };
+}
+/** Format a copy; the approved snapshot and its identity checks remain unchanged. */
+function displayCredentialSnapshot(snapshot: CredentialSnapshot): CredentialSnapshot {
+  return { ...snapshot, student: displayCredentialStudent(snapshot.student) };
 }
 
 /** Six calendar months, clamped to the last day when the destination month is shorter. */
@@ -163,12 +172,12 @@ export function getCredentialState(studentId: number): CredentialState {
   if (current && !fs.existsSync(credentialFile(current.photo_file))) status = "missing_photo";
   const qr = issue ? QRCode.create(issue.verification_url, { errorCorrectionLevel: "M" }).modules : null;
   return {
-    student, template, status, revision: current?.revision ?? 0, validity: credentialValidity(student),
+    student: displayCredentialStudent(student), template, status, revision: current?.revision ?? 0, validity: credentialValidity(student),
     framing: { cropX: current?.crop_x ?? .5, cropY: current?.crop_y ?? .5, zoom: current?.zoom ?? 1 },
     photo: current ? { width: current.photo_width, height: current.photo_height, sha256: current.photo_hash } : null,
     submission: publicPhotoSubmission(latestPhotoSubmission(studentId)),
     canDownload: status === "active", issue: issue && qr ? { id: issue.id, folio: issue.folio, issuedAt: issue.issued_at,
-      verificationUrl: issue.verification_url, snapshot: JSON.parse(issue.snapshot_json), qr: { size: qr.size, data: Array.from(qr.data) } } : null
+      verificationUrl: issue.verification_url, snapshot: displayCredentialSnapshot(JSON.parse(issue.snapshot_json)), qr: { size: qr.size, data: Array.from(qr.data) } } : null
   };
 }
 function revokeCurrent(studentId: number, reason: string) {
@@ -225,7 +234,7 @@ export function deactivateCredential(studentId: number, revision: unknown, userI
 
 export async function activateCredential(studentId: number, body: any, userId: number,
   submission?: { row: PhotoSubmissionRow; variant: "original" | "prepared" }) {
-  const state = getCredentialState(studentId), current = expectRevision(studentId, body.revision);
+  const state = getCredentialState(studentId), current = expectRevision(studentId, body.revision), identity = credentialStudent(studentId);
   const photoFile = submission ? submission.row[`${submission.variant}_file`] : current?.photo_file;
   const photo = submission ? { width: submission.row.width, height: submission.row.height, sha256: submission.row[`${submission.variant}_hash`] } : state.photo;
   if (!photoFile || !photo || !fs.existsSync(credentialFile(photoFile))) throw new ApiError(409, "Carga una fotografía antes de activar la credencial.");
@@ -237,7 +246,7 @@ export async function activateCredential(studentId: number, body: any, userId: n
   const framing = validateCredentialFraming(body, submission ? { cropX: submission.row.crop_x, cropY: submission.row.crop_y, zoom: submission.row.zoom } : state.framing), id = crypto.randomUUID(), token = crypto.randomBytes(24).toString("hex");
   const issuedAt = new Date().toISOString(), folio = `CEST-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
   const verificationUrl = `${publicAppUrl()}/verificar-credencial/${token}`;
-  const snapshot: CredentialSnapshot = { student: state.student, template: state.template, framing, photo, issuedAt, folio, validity: state.validity };
+  const snapshot: CredentialSnapshot = { student: identity, template: state.template, framing, photo, issuedAt, folio, validity: state.validity };
   const card = await buildCredentialPdf(snapshot, photoFile, verificationUrl, "card");
   const print = await buildCredentialPdf(snapshot, photoFile, verificationUrl, "letter");
   const files = [`issues/${id}-card-v${credentialPdfVersion}.pdf`, `issues/${id}-print-v${credentialPdfVersion}.pdf`];
@@ -246,7 +255,7 @@ export async function activateCredential(studentId: number, body: any, userId: n
     transaction(() => {
       expectRevision(studentId, body.revision);
       if (submission && photoSubmission(studentId, submission.row.id).status !== "pending") throw new ApiError(409, "La foto cambió o ya fue revisada. Recarga antes de aprobar.");
-      if (credentialTemplate().version !== state.template.version || JSON.stringify(credentialStudent(studentId)) !== JSON.stringify(state.student)) throw new ApiError(409, "Los datos del alumno o el diseño cambiaron. Recarga y vuelve a activar.");
+      if (credentialTemplate().version !== state.template.version || JSON.stringify(credentialStudent(studentId)) !== JSON.stringify(identity)) throw new ApiError(409, "Los datos del alumno o el diseño cambiaron. Recarga y vuelve a activar.");
       revokeCurrent(studentId, "reissued");
       const json = JSON.stringify(snapshot);
       run(`INSERT INTO credential_issues(id,token,folio,student_id,photo_file,card_file,print_file,snapshot_json,snapshot_hash,verification_url,issued_by,issued_at)
@@ -306,7 +315,7 @@ export function verifyCredential(token: string): CredentialVerification {
     needs_review: "Esta credencial requiere actualización por Control Escolar.", inactive: "Esta credencial ya no corresponde a una inscripción activa.",
     draft: "Esta credencial está pendiente de activación.", missing_photo: "Esta credencial no tiene fotografía autorizada."
   };
-  return { status, message: messages[status], document: JSON.parse(issue.snapshot_json), verificationUrl: issue.verification_url,
+  return { status, message: messages[status], document: displayCredentialSnapshot(JSON.parse(issue.snapshot_json)), verificationUrl: issue.verification_url,
     photoUrl: status === "active" ? `/api/credentials/verify/${token}/photo` : null };
 }
 
