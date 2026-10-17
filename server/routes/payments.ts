@@ -1013,6 +1013,7 @@ paymentsRouter.patch("/:id", requirePermission("payments.manage"), (req: Authent
   const current = get<{ student_id: number }>("SELECT student_id FROM student_payments WHERE id = ?", id);
   if (!current) throw new ApiError(404, "No se encontro el pago.");
   const body = normalizedPaymentBody(req.body);
+  transaction(() => {
   run(
     `UPDATE student_payments SET folio = ?, amount = ?, paid_at = ?, payment_method = ?,
      concept = ?, concept_type = ?, covered_month = ?, registration_period_number = ?, notes = ?, updated_by = ?,
@@ -1043,6 +1044,7 @@ paymentsRouter.patch("/:id", requirePermission("payments.manage"), (req: Authent
       userId: req.user!.id
     });
   }
+  });
   logActivity(req, "update", "student_payments", id, { folio: body.folio, amount: body.amount });
   res.json(fullAccount(current.student_id));
 });
@@ -1051,8 +1053,10 @@ paymentsRouter.delete("/:id", requirePermission("payments.manage"), (req: Authen
   const id = asId(req.params.id, "Pago");
   const payment = get<{ student_id: number; folio: string; amount: number }>("SELECT student_id, folio, amount FROM student_payments WHERE id = ?", id);
   if (!payment) throw new ApiError(404, "El pago ya no existe.");
-  unlinkTuitionChargePayment(id);
-  run("DELETE FROM student_payments WHERE id = ?", id);
+  transaction(() => {
+    unlinkTuitionChargePayment(id);
+    run("DELETE FROM student_payments WHERE id = ?", id);
+  });
   logActivity(req, "delete", "student_payments", id, payment);
   res.status(204).end();
 });

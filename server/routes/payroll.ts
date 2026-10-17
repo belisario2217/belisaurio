@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { all, get, run, transaction } from "../db.js";
-import { requirePermission, type AuthenticatedRequest } from "../auth.js";
+import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { ApiError, asId, cleanText } from "../utils.js";
 import { sendCsv } from "../utils.js";
 import { isoDate, payrollCalculation } from "../services/payroll.js";
@@ -30,7 +30,14 @@ payrollRouter.patch('/profiles/:id',requirePermission('payments.manage'),(req,re
  run('UPDATE payroll_profiles SET full_name=?,position=?,rate=?,weekly_hours=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',p.fullName,p.position,p.rate,p.weeklyHours,req.body.isActive===undefined?current.is_active:req.body.isActive?1:0,id);res.json({message:'Ficha de nómina actualizada.'});
 });
 function profile(id:unknown){const row=get<any>('SELECT * FROM payroll_profiles WHERE id=? AND is_active=1',asId(id,'Trabajador'));if(!row)throw new ApiError(404,'Selecciona una ficha de nómina activa.');return row;}
-payrollRouter.post('/preview',requirePermission('payments.view'),(req,res)=>res.json(payrollCalculation(profile(req.body.profileId),req.body)));
+payrollRouter.post('/preview',requirePermission('payments.view'),(req,res)=>{
+ if(req.body.paymentId){
+  const previous=get<any>('SELECT * FROM payroll_payments WHERE id=?',asId(req.body.paymentId,'Pago'));
+  if(!previous)throw new ApiError(404,'No se encontró el pago.');
+  return res.json(payrollCalculation({kind:previous.kind,rate:previous.rate,weekly_hours:previous.weekly_hours},req.body));
+ }
+ return res.json(payrollCalculation(profile(req.body.profileId),req.body));
+});
 payrollRouter.post('/payments',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
  const p=profile(req.body.profileId),calculation=payrollCalculation(p,req.body),paidAt=isoDate(req.body.paidAt,'Fecha de pago'),notes=cleanText(req.body.notes,500);
  if(req.body.expectedAmount!==undefined&&(Number(req.body.expectedAmount)!==calculation.amount||Number(req.body.expectedRate)!==calculation.rate))throw new ApiError(409,'La tarifa o el cálculo cambió. Revisa el cálculo de nuevo antes de registrar el pago.');
@@ -42,6 +49,37 @@ payrollRouter.post('/payments',requirePermission('payments.manage'),(req:Authent
   const result=run(`INSERT INTO payroll_payments(profile_id,period_start,period_end,staff_name,kind,rate,weekly_hours,weeks,worked_days,amount,paid_at,expense_id,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,p.id,calculation.periodStart,calculation.periodEnd,p.full_name,p.kind,calculation.rate,calculation.weeklyHours,calculation.weeks,calculation.workedDays,calculation.amount,paidAt,Number(expense.lastInsertRowid),notes);
   return {id:Number(result.lastInsertRowid),expenseId:Number(expense.lastInsertRowid),...calculation};
  });res.status(201).json(payment);
+});
+// Los ajustes usan la tarifa histórica guardada, no la tarifa actual de la ficha.
+payrollRouter.patch('/payments/:id',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
+ const id=asId(req.params.id,'Pago'),previous=get<any>('SELECT * FROM payroll_payments WHERE id=?',id);
+ if(!previous)throw new ApiError(404,'No se encontró el pago de nómina.');
+ if(req.body.expectedOriginalAmount!==undefined&&Number(req.body.expectedOriginalAmount)!==previous.amount)throw new ApiError(409,'Este pago fue modificado por otra persona. Actualiza el listado.');
+ const calculation=payrollCalculation({kind:previous.kind,rate:previous.rate,weekly_hours:previous.weekly_hours},req.body);
+ const paidAt=isoDate(req.body.paidAt,'Fecha de pago'),notes=cleanText(req.body.notes,500);
+ if(req.body.expectedAmount!==undefined&&(Number(req.body.expectedAmount)!==calculation.amount||Number(req.body.expectedRate)!==calculation.rate))throw new ApiError(409,'El cálculo cambió. Revisa el importe antes de guardar.');
+ transaction(()=>{
+  const overlap=get('SELECT id FROM payroll_payments WHERE profile_id=? AND id<>? AND period_start<=? AND period_end>=?',previous.profile_id,id,calculation.periodEnd,calculation.periodStart);
+  if(overlap)throw new ApiError(409,'El periodo se cruza con otro pago de esta persona.');
+  run('UPDATE payroll_payments SET period_start=?,period_end=?,rate=?,weekly_hours=?,weeks=?,worked_days=?,amount=?,paid_at=?,notes=? WHERE id=?',
+   calculation.periodStart,calculation.periodEnd,calculation.rate,calculation.weeklyHours,calculation.weeks,calculation.workedDays,calculation.amount,paidAt,notes,id);
+  const updated=run('UPDATE operating_expenses SET amount=?,paid_at=?,notes=? WHERE id=?',calculation.amount,paidAt,notes,previous.expense_id);
+  if(Number(updated.changes)!==1)throw new ApiError(409,'No se encontró el egreso vinculado. No se modificó el pago.');
+  logActivity(req,'update','payroll_payments',id,{before:{amount:previous.amount,paidAt:previous.paid_at,periodStart:previous.period_start,periodEnd:previous.period_end},after:{amount:calculation.amount,paidAt,periodStart:calculation.periodStart,periodEnd:calculation.periodEnd}});
+ });
+ res.json({id,expenseId:previous.expense_id,...calculation});
+});
+payrollRouter.delete('/payments/:id',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
+ const id=asId(req.params.id,'Pago');
+ transaction(()=>{
+  const payment=get<any>('SELECT * FROM payroll_payments WHERE id=?',id);
+  if(!payment)throw new ApiError(404,'No se encontró el pago de nómina.');
+  run('DELETE FROM payroll_payments WHERE id=?',id);
+  const removed=run('DELETE FROM operating_expenses WHERE id=?',payment.expense_id);
+  if(Number(removed.changes)!==1)throw new ApiError(409,'No se encontró el egreso vinculado. No se eliminó el pago.');
+  logActivity(req,'delete','payroll_payments',id,{amount:payment.amount,expenseId:payment.expense_id,staffName:payment.staff_name});
+ });
+ res.status(204).end();
 });
 payrollRouter.get('/payments',requirePermission('payments.view'),(req,res)=>{
  const month=String(req.query.month??'');if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new ApiError(400,'Selecciona un mes válido.');
