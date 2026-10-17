@@ -36,6 +36,64 @@ function installments(paymentId:number,items:Array<{loanId:number;amount:number}
  run('DELETE FROM payroll_loan_repayments WHERE payment_id=?',paymentId);
  for(const item of items)run('INSERT INTO payroll_loan_repayments(loan_id,payment_id,amount) VALUES(?,?,?)',item.loanId,paymentId,item.amount);
 }
+// El descuento queda pendiente hasta vincularse a un pago de nómina.
+function deductionValues(body:any){
+ const amount=Number(body.amount),reason=cleanText(body.reason,300),effectiveDate=isoDate(body.effectiveDate,'Fecha del descuento');
+ if(!Number.isFinite(amount)||amount<0.01||amount>1e8||Math.abs(amount*100-Math.round(amount*100))>1e-6)
+  throw new ApiError(400,'El descuento debe ser positivo y tener como máximo dos decimales.');
+ if(!reason)throw new ApiError(400,'El motivo del descuento es obligatorio.');
+ return {amount:Math.round(amount*100)/100,reason,effectiveDate};
+}
+function applyDeductions(paymentId:number,profileId:number,ids:number[]){
+ // La validación del cálculo se realiza de nuevo dentro de la transacción.
+ run('UPDATE payroll_deductions SET payment_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE payment_id=?',paymentId);
+ for(const id of ids){
+  const updated=run('UPDATE payroll_deductions SET payment_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND profile_id=? AND payment_id IS NULL',
+   paymentId,id,profileId);
+  if(Number(updated.changes)!==1)throw new ApiError(409,'El descuento ya está aplicado a otra nómina o cambió. Actualiza la pantalla.');
+ }
+}
+payrollRouter.get('/deductions',requirePermission('payments.view'),(req,res)=>{
+ const profileId=req.query.profileId?asId(req.query.profileId,'Trabajador'):null;
+ res.json(all(`SELECT d.*,p.full_name,p.kind AS staff_kind,pay.paid_at AS applied_at
+   FROM payroll_deductions d JOIN payroll_profiles p ON p.id=d.profile_id
+   LEFT JOIN payroll_payments pay ON pay.id=d.payment_id
+   WHERE (? IS NULL OR d.profile_id=?) ORDER BY d.effective_date DESC,d.id DESC`,profileId,profileId));
+});
+payrollRouter.post('/deductions',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
+ const p=profile(req.body.profileId),values=deductionValues(req.body);
+ const id=transaction(()=>{
+  const result=run('INSERT INTO payroll_deductions(profile_id,amount,reason,effective_date,created_by) VALUES(?,?,?,?,?)',
+   p.id,values.amount,values.reason,values.effectiveDate,req.user!.id);
+  const id=Number(result.lastInsertRowid);
+  logActivity(req,'create','payroll_deductions',id,{profileId:p.id,...values});
+  return id;
+ });
+ res.status(201).json({id});
+});
+payrollRouter.patch('/deductions/:id',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
+ const id=asId(req.params.id,'Descuento'),values=deductionValues(req.body);
+ transaction(()=>{
+  const before=get<any>('SELECT * FROM payroll_deductions WHERE id=?',id);
+  if(!before)throw new ApiError(404,'No se encontró el descuento.');
+  if(before.payment_id!==null)throw new ApiError(409,'Este descuento ya fue aplicado. Corrige el pago de nómina antes de modificarlo.');
+  run('UPDATE payroll_deductions SET amount=?,reason=?,effective_date=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',
+   values.amount,values.reason,values.effectiveDate,id);
+  logActivity(req,'update','payroll_deductions',id,{before:{amount:before.amount,reason:before.reason},after:values});
+ });
+ res.json({id});
+});
+payrollRouter.delete('/deductions/:id',requirePermission('payments.manage'),(req:AuthenticatedRequest,res)=>{
+ const id=asId(req.params.id,'Descuento');
+ transaction(()=>{
+  const before=get<any>('SELECT * FROM payroll_deductions WHERE id=?',id);
+  if(!before)throw new ApiError(404,'No se encontró el descuento.');
+  if(before.payment_id!==null)throw new ApiError(409,'El descuento ya fue aplicado. Corrige el pago de nómina para liberarlo.');
+  run('DELETE FROM payroll_deductions WHERE id=?',id);
+  logActivity(req,'delete','payroll_deductions',id,{profileId:before.profile_id,amount:before.amount,reason:before.reason});
+ });
+ res.status(204).end();
+});
 function paymentRow(id:number){
  const row=get<any>('SELECT * FROM payroll_payments WHERE id=?',id);
  if(!row)throw new ApiError(404,'No se encontró el pago de nómina.');
@@ -59,6 +117,7 @@ payrollRouter.post('/payments',requirePermission('payments.manage'),(req:Authent
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,p.id,calc.periodStart,calc.periodEnd,p.full_name,p.kind,calc.rate,calc.weeklyHours,calc.weeks,calc.workedDays,calc.amount,paidAt,Number(expense.lastInsertRowid),notes,calc.grossAmount,calc.manualDeduction,calc.deductionReason);
   const id=Number(result.lastInsertRowid);
   installments(id,calc.loanRepayments);
+  applyDeductions(id,p.id,calc.deductionIds);
   logActivity(req,'create','payroll_payments',id,{gross:calc.grossAmount,manualDeduction:calc.manualDeduction,loanDeduction:calc.loanDeduction,net:calc.amount});
   return {id,expenseId:Number(expense.lastInsertRowid),...calc};
  });
@@ -78,6 +137,7 @@ payrollRouter.patch('/payments/:id',requirePermission('payments.manage'),(req:Au
   const expense=run('UPDATE operating_expenses SET amount=?,paid_at=?,notes=? WHERE id=?',calc.amount,paidAt,notes,previous.expense_id);
   if(Number(expense.changes)!==1)throw new ApiError(409,'No se encontró el egreso vinculado. No se modificó el pago.');
   installments(id,calc.loanRepayments);
+  applyDeductions(id,previous.profile_id,calc.deductionIds);
   logActivity(req,'update','payroll_payments',id,{before:{net:previous.amount,gross:previous.gross_amount},after:{net:calc.amount,gross:calc.grossAmount,manualDeduction:calc.manualDeduction,loanDeduction:calc.loanDeduction}});
   return {id,expenseId:previous.expense_id,...calc};
  });
@@ -98,7 +158,7 @@ payrollRouter.delete('/payments/:id',requirePermission('payments.manage'),(req:A
 payrollRouter.get('/payments',requirePermission('payments.view'),(req,res)=>{
  const month=String(req.query.month??'');if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new ApiError(400,'Selecciona un mes válido.');
  const rows=all<any>('SELECT * FROM payroll_payments WHERE substr(paid_at,1,7)=? ORDER BY paid_at DESC,id DESC',month);
- res.json(rows.map(row=>({...row,loanRepayments:all('SELECT loan_id AS loanId,amount FROM payroll_loan_repayments WHERE payment_id=? ORDER BY id',row.id)})));
+ res.json(rows.map(row=>({...row,loanRepayments:all('SELECT loan_id AS loanId,amount FROM payroll_loan_repayments WHERE payment_id=? ORDER BY id',row.id),deductionIds:all<{id:number}>('SELECT id FROM payroll_deductions WHERE payment_id=? ORDER BY id',row.id).map(d=>d.id)})));
 });
 payrollRouter.get('/loans',requirePermission('payments.view'),(req,res)=>{
  const profileId=req.query.profileId?asId(req.query.profileId,'Trabajador'):null;
@@ -148,6 +208,6 @@ payrollRouter.post('/concepts',requirePermission('payments.manage'),(req,res)=>{
 
 payrollRouter.get('/export',requirePermission('payments.view'),(req,res)=>{
  const month=String(req.query.month??''),kind=String(req.query.kind??'');if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||!['teacher','administrative'].includes(kind))throw new ApiError(400,'Selecciona mes y tipo de nómina.');
- const rows=all<any>(`SELECT p.*,COALESCE((SELECT SUM(amount) FROM payroll_loan_repayments r WHERE r.payment_id=p.id),0) AS loan_deduction FROM payroll_payments p WHERE substr(p.paid_at,1,7)=? AND p.kind=? ORDER BY spanish_sort(p.staff_name),p.paid_at`,month,kind).map(p=>({'Persona':p.staff_name,'Inicio':p.period_start,'Fin':p.period_end,'Tarifa':p.rate,'Horas semanales':p.weekly_hours,'Semanas':p.weeks,'Días trabajados':p.worked_days,'Sueldo bruto':p.gross_amount,'Descuentos generales':p.manual_deduction,'Motivo':p.deduction_reason,'Descuentos por préstamos':p.loan_deduction,'Pago neto':p.amount,'Importe':p.amount,'Fecha de pago':p.paid_at}));
+ const rows=all<any>(`SELECT p.*,COALESCE((SELECT SUM(amount) FROM payroll_loan_repayments r WHERE r.payment_id=p.id),0) AS loan_deduction,COALESCE((SELECT SUM(amount) FROM payroll_deductions d WHERE d.payment_id=p.id),0) AS registered_deduction FROM payroll_payments p WHERE substr(p.paid_at,1,7)=? AND p.kind=? ORDER BY spanish_sort(p.staff_name),p.paid_at`,month,kind).map(p=>({'Persona':p.staff_name,'Inicio':p.period_start,'Fin':p.period_end,'Tarifa':p.rate,'Horas semanales':p.weekly_hours,'Semanas':p.weeks,'Días trabajados':p.worked_days,'Sueldo bruto':p.gross_amount,'Descuentos generales':p.manual_deduction,'Motivo':p.deduction_reason,'Descuentos registrados':p.registered_deduction,'Descuentos por préstamos':p.loan_deduction,'Pago neto':p.amount,'Importe':p.amount,'Fecha de pago':p.paid_at}));
  sendCsv(res,`nomina-${kind}-${month}.csv`,Object.keys(rows[0]??{Persona:"",Inicio:"",Fin:"",Importe:""}),rows.map(row=>Object.values(row)));
 });
