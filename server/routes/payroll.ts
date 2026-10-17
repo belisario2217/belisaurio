@@ -96,7 +96,7 @@ payrollRouter.delete('/payments/:id',requirePermission('payments.manage'),(req:A
  res.status(204).end();
 });
 payrollRouter.get('/payments',requirePermission('payments.view'),(req,res)=>{
- const month=String(req.query.month??'');if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new ApiError(400,'Selecciona un mes válido.');
+ const month=String(req.query.month??'');if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new ApiError(400,'Selecciona un mes válido.');
  const rows=all<any>('SELECT * FROM payroll_payments WHERE substr(paid_at,1,7)=? ORDER BY paid_at DESC,id DESC',month);
  res.json(rows.map(row=>({...row,loanRepayments:all('SELECT loan_id AS loanId,amount FROM payroll_loan_repayments WHERE payment_id=? ORDER BY id',row.id)})));
 });
