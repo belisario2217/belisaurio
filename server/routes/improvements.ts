@@ -84,7 +84,7 @@ function monthRange(input: unknown) {
 improvementsRouter.get("/balance", requirePermission("payments.view"), (req, res) => {
   const range = monthRange(req.query.month);
   const income = get<{amount:number}>("SELECT COALESCE(SUM(amount),0) AS amount FROM student_payments WHERE paid_at>=? AND paid_at<?", range.start,range.end)!.amount;
-  const expenses = all<any>("SELECT oe.*, pp.id AS payroll_payment_id FROM operating_expenses oe LEFT JOIN payroll_payments pp ON pp.expense_id=oe.id WHERE oe.paid_at>=? AND oe.paid_at<? ORDER BY oe.paid_at DESC,oe.id DESC",range.start,range.end);
+  const expenses = all<any>("SELECT oe.*, pp.id AS payroll_payment_id, pl.id AS payroll_loan_id FROM operating_expenses oe LEFT JOIN payroll_payments pp ON pp.expense_id=oe.id LEFT JOIN payroll_loans pl ON pl.expense_id=oe.id WHERE oe.paid_at>=? AND oe.paid_at<? ORDER BY oe.paid_at DESC,oe.id DESC",range.start,range.end);
   const breakdown = all("SELECT COALESCE(ec.name, CASE oe.category WHEN 'payroll' THEN 'Nómina' WHEN 'operating' THEN 'Operación' ELSE 'Otro' END) AS name,SUM(oe.amount) AS amount FROM operating_expenses oe LEFT JOIN expense_concepts ec ON ec.id=oe.concept_id WHERE oe.paid_at>=? AND oe.paid_at<? GROUP BY 1 ORDER BY spanish_sort(name)",range.start,range.end);
   const expense = expenses.reduce((sum,row)=>sum+Number(row.amount),0);
   res.json({ month: range.month, income, expense, balance: Math.round((income-expense)*100)/100, expenses, breakdown });
@@ -111,7 +111,7 @@ improvementsRouter.post("/expenses", requirePermission("payments.manage"), (req:
 improvementsRouter.patch("/expenses/:id",requirePermission("payments.manage"),(req:AuthenticatedRequest,res)=>{
  const id=asId(req.params.id,'Egreso'),previous=get<any>('SELECT * FROM operating_expenses WHERE id=?',id);
  if(!previous)throw new ApiError(404,'No se encontró el egreso.');
- if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a un pago de nómina. Edítalo desde Nómina.');
+ if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id)||get('SELECT id FROM payroll_loans WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a nómina, adelanto o préstamo. Edítalo desde Nómina.');
  const p=expenseValues(req.body);
  transaction(()=>{
   run('UPDATE operating_expenses SET concept=?,category=?,amount=?,paid_at=?,notes=?,concept_id=? WHERE id=?',p.concept,p.category,p.amount,p.paidAt,p.notes,p.conceptId,id);
@@ -122,7 +122,7 @@ improvementsRouter.patch("/expenses/:id",requirePermission("payments.manage"),(r
 improvementsRouter.delete("/expenses/:id",requirePermission("payments.manage"),(req:AuthenticatedRequest,res)=>{
  const id=asId(req.params.id,'Egreso'),previous=get<any>('SELECT * FROM operating_expenses WHERE id=?',id);
  if(!previous)throw new ApiError(404,'No se encontró el egreso.');
- if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a un pago de nómina. Elimínalo desde Nómina.');
+ if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id)||get('SELECT id FROM payroll_loans WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a nómina, adelanto o préstamo. Elimínalo desde Nómina.');
  transaction(()=>{
   run('DELETE FROM operating_expenses WHERE id=?',id);
   logActivity(req,'delete','operating_expenses',id,{concept:previous.concept,amount:previous.amount});
