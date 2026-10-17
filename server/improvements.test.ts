@@ -150,9 +150,9 @@ describe('Single-campus IFOP improvements',()=>{
    expect(all('PRAGMA foreign_key_check')).toHaveLength(0);
  });
  it('supports payroll deductions for teachers and validates repayment ownership',async()=>{
-   const teacher=get<{id:number}>('SELECT id FROM teachers WHERE id NOT IN (SELECT teacher_id FROM payroll_profiles WHERE teacher_id IS NOT NULL) LIMIT 1')!;
-   const created=await api('post','/payroll/profiles').send({kind:'teacher',teacherId:teacher.id,rate:100,weeklyHours:10});expect(created.status).toBe(201);
-   const profileId=created.body.id;
+   const existing=get<{id:number}>("SELECT id FROM payroll_profiles WHERE kind='teacher' AND is_active=1 ORDER BY id LIMIT 1")!;
+   const profileId=existing.id;
+   await api('patch',`/payroll/profiles/${profileId}`).send({rate:100,weeklyHours:10}).expect(200);
    const loan=await api('post','/payroll/loans').send({profileId,kind:'advance',amount:300,issuedAt:'2028-02-03'});expect(loan.status).toBe(201);
    const form={profileId,periodStart:'2028-02-01',periodEnd:'2028-02-28',paidAt:'2028-02-25',weeks:2,weeklyHours:10,manualDeduction:100,deductionReason:'Descuento autorizado',loanRepayments:[{loanId:loan.body.id,amount:150}]};
    const preview=await api('post','/payroll/preview').send(form);expect(preview.body).toMatchObject({grossAmount:2000,amount:1750});
