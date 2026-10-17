@@ -61,6 +61,10 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   const { can } = useAuth();
   const toast = useToast();
   const [options, setOptions] = useState<Record<string, Option[]>>({});
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsRetry, setOptionsRetry] = useState(0);
+  const [studentSearch, setStudentSearch] = useState("");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [planSubjects, setPlanSubjects] = useState<PlanSubject[]>([]);
   const [curricularRows, setCurricularRows] = useState<CurricularSubject[]>([]);
@@ -161,20 +165,28 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   }
 
   useEffect(() => {
-    Promise.all(["groups", "cycles"].map(async (type) => {
-      const result = await api<{ records: any[] }>(`/catalogs/${type}`);
-      return [type, result.records.filter((item) => item.is_active).map((item) => ({
-        id: item.id,
-        name: item.name,
-        active_cycle_id: item.active_cycle_id,
-        plan_id: item.plan_id
-      }))] as const;
-    })).then((entries) => setOptions(Object.fromEntries(entries)));
-    api<{ records: any[] }>("/students?pageSize=100").then((result) =>
-      setOptions((current) => ({ ...current, students: result.records.map((student) => ({ id: student.id, name: `${student.student_number} - ${student.full_name}` })) }))
-    );
+    // La consulta única evita que una respuesta tardía reemplace las opciones ya cargadas.
+    // También incluye a todos los alumnos activos, sin el límite de 100 de /students.
+    const controller = new AbortController();
+    setOptionsLoading(true);
+    setOptionsError("");
+    api<{ students: Option[]; groups: Option[]; cycles: Option[] }>("/reports/document-options", { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setOptions(result);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setOptionsError(error instanceof Error ? error.message : "No se pudieron cargar los alumnos y grupos.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOptionsLoading(false);
+      });
+    return () => controller.abort();
+  }, [optionsRetry]);
+
+  useEffect(() => {
+    if (view === "documents") return;
     api<Plan[]>("/plans").then((records) => setPlans(records.filter((plan) => plan.is_active))).catch(() => undefined);
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     setAcademicContext(null); setContextError(""); setIssuedDocuments([]);
@@ -355,6 +367,9 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
     }
   }
 
+  const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("es-MX");
+  const matchingStudents = (options.students ?? []).filter((student) => !normalizedStudentSearch ||
+    student.name.toLocaleLowerCase("es-MX").includes(normalizedStudentSearch) || String(student.id) === studentId);
   const semesterSubjects = planSubjects.filter((subject) => String(subject.recommended_period) === semester);
   const changedRowsCount = curricularRows.filter((row) => isDraftChanged(row)).length;
   const listReports = reports.filter((report) => report.type === "students" || report.type === "attendance");
@@ -393,10 +408,16 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
           <div><span>Control Escolar</span><h2>Documentos escolares</h2><p>Emisión institucional con firma, sello y QR de validación.</p></div>
         </div>
         <div className="report-builder-controls">
-          <Field label="Alumno"><Select options={options.students ?? []} value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="Seleccionar alumno" /></Field>
-          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Seleccionar grupo" /></Field>
+          <div className="document-student-picker">
+            <Field label="Alumno"><Select options={matchingStudents} value={studentId} onChange={(event) => setStudentId(event.target.value)} disabled={optionsLoading || Boolean(optionsError)} placeholder={optionsLoading ? "Cargando alumnos..." : "Seleccionar alumno"} /></Field>
+            {!optionsLoading && !optionsError && (options.students?.length ?? 0) > 25 && <input type="search" aria-label="Buscar alumno por nombre o matrícula" placeholder="Buscar por nombre o matrícula" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} />}
+            {!optionsLoading && !optionsError && <small className="workspace-help">{matchingStudents.length} alumnos disponibles</small>}
+          </div>
+          <Field label="Grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} disabled={optionsLoading || Boolean(optionsError)} placeholder={optionsLoading ? "Cargando grupos..." : "Seleccionar grupo"} /></Field>
           <Button variant="secondary" icon={<Sheet size={17} />} busy={documentBusy} onClick={() => reportCard("group")}>Boletas por grupo</Button>
         </div>
+        {optionsError && <div role="alert" className="document-context"><span>No fue posible cargar los alumnos y grupos: {optionsError}</span> <Button variant="secondary" onClick={() => setOptionsRetry((value) => value + 1)}>Reintentar carga</Button></div>}
+        {!optionsLoading && !optionsError && !(options.students?.length ?? 0) && <p role="status" className="document-context">No hay alumnos activos registrados para emitir documentos. Verifica el módulo de Alumnos.</p>}
         {academicContext && <p className="document-context"><strong>{academicContext.name}</strong><span>{academicContext.semesterName} · Ciclo escolar {academicContext.cycle} · Grupo {academicContext.group}</span></p>}
         {contextError && <p className="document-context" role="alert">{contextError}</p>}
         <div className="official-document-options">
