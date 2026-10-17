@@ -78,6 +78,19 @@ describe('Single-campus IFOP improvements',()=>{
    expect((await api('get','/improvements/balance?month=2027-04')).body.expenses.some((e:any)=>e.id===expenseId)).toBe(false);
    expect(all('PRAGMA foreign_key_check')).toHaveLength(0);
  });
+ it('recalculates and deletes teacher payments without leaving orphan expenses',async()=>{
+   const teacher=get<{id:number}>('SELECT id FROM teachers WHERE id NOT IN (SELECT teacher_id FROM payroll_profiles WHERE teacher_id IS NOT NULL) LIMIT 1')!;
+   expect(teacher).toBeTruthy();
+   const createdProfile=await api('post','/payroll/profiles').send({kind:'teacher',teacherId:teacher.id,rate:90,weeklyHours:6});expect(createdProfile.status).toBe(201);
+   const form={profileId:createdProfile.body.id,periodStart:'2027-07-01',periodEnd:'2027-07-31',paidAt:'2027-07-31',weeklyHours:6,weeks:2};
+   const created=await api('post','/payroll/payments').send(form);expect(created.status).toBe(201);expect(created.body.amount).toBe(1080);
+   const updated=await api('patch',`/payroll/payments/${created.body.id}`).send({...form,weeklyHours:8,weeks:2,expectedAmount:1440,expectedRate:90});expect(updated.status).toBe(200);
+   expect(get<{amount:number}>('SELECT amount FROM operating_expenses WHERE id=?',created.body.expenseId)!.amount).toBe(1440);
+   expect(get<{weekly_hours:number}>('SELECT weekly_hours FROM payroll_payments WHERE id=?',created.body.id)!.weekly_hours).toBe(8);
+   await request(app).delete(`/api/payroll/payments/${created.body.id}`).set('Authorization',auth()).expect(204);
+   expect(get('SELECT id FROM operating_expenses WHERE id=?',created.body.expenseId)).toBeUndefined();
+   expect(get<{n:number}>("SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type='payroll_payments' AND action='delete' AND entity_id=?",String(created.body.id))!.n).toBe(1);
+ });
  it('updates and deletes manual expenses without changing payroll records',async()=>{
    const created=await api('post','/improvements/expenses').send({concept:'Prueba de oficina',amount:125,paidAt:'2027-05-04',category:'operating',notes:'Recibo de prueba'});expect(created.status).toBe(201);
    const id=created.body.id;
