@@ -21,6 +21,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage").then((module) => 
 const PlansPage = lazy(() => import("./pages/PlansPage").then((module) => ({ default: module.PlansPage })));
 const StudentPortalPage = lazy(() => import("./pages/StudentPortalPage").then((module) => ({ default: module.StudentPortalPage })));
 const PaymentsPage = lazy(() => import("./pages/PaymentsPage").then((module) => ({ default: module.PaymentsPage })));
+const FoliosPage = lazy(() => import("./pages/FoliosPage").then((module) => ({ default: module.FoliosPage })));
 const TuitionGridPage = lazy(() => import("./pages/TuitionGridPage").then((module) => ({ default: module.TuitionGridPage })));
 const MessagesAdminPage = lazy(() => import("./pages/MessagesAdminPage").then((module) => ({ default: module.MessagesAdminPage })));
 const StudentMessagesPage = lazy(() => import("./pages/StudentMessagesPage").then((module) => ({ default: module.StudentMessagesPage })));
@@ -70,6 +71,7 @@ export function App() {
               <Route path="/documentos" element={<ReportsPage view="documents" />} />
               <Route path="/credenciales" element={<CredentialsPage />} />
               <Route path="/cobros" element={<PaymentsPage />} />
+              <Route path="/folios" element={<FoliosPage />} />
               <Route path="/colegiaturas-mensuales" element={<TuitionGridPage />} />
               <Route path="/mensajes-admin" element={<MessagesAdminPage />} />
               <Route path="/catalogos" element={<CatalogsPage />} />

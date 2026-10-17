@@ -336,7 +336,7 @@ export function PaymentsPage() {
             {(form.concept.toLowerCase().includes("inscrip")) && <Field label="Semestre que ampara" required><select value={form.registrationPeriodNumber} onChange={(event) => setForm({ ...form, registrationPeriodNumber: event.target.value })} required><option value="">Seleccionar</option>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}° semestre</option>)}</select></Field>}
           </div>
           <Field label="Concepto" required><input value={form.concept} onChange={(event) => setForm({ ...form, concept: event.target.value })} required /></Field>
-          <Field label="NÚMERO DE FOLIO FÍSICO" required><input inputMode="numeric" maxLength={4} pattern="(?:0{3}[1-9]|0{2}[1-9][0-9]|0[1-9][0-9]{2}|1000)" placeholder="0001" title="Ingresa un número del 0001 al 1000." value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value.replace(/\D/g, "").slice(0, 4) })} required /></Field>
+          <Field label="NÚMERO DE FOLIO FÍSICO" required hint="Mínimo cuatro dígitos. Después de 9999, continúa con 10000, 10001, etc."><input inputMode="numeric" pattern="0*[1-9][0-9]*" placeholder="0001" title="Ingresa un folio numérico mayor que cero, sin límite de consecutivo." value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value.replace(/\D/g, "") })} required /></Field>
           <div className="modal-actions"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button><Button type="submit" busy={busy}>{editing ? "Guardar cambios" : "Registrar pago"}</Button></div>
         </form>
       </Modal>

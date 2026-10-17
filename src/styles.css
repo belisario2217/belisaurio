@@ -485,6 +485,12 @@ tbody tr:last-child td { border-bottom: 0; }
 .report-builder-intro h2 { margin-top: 5px; font-size: 17px; }
 .report-builder-intro p { margin-top: 6px; color: #bcccdc; font-size: 10px; line-height: 1.5; }
 .report-builder-controls { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); align-content: center; gap: 12px; padding: 22px; }
+.document-student-picker { min-width: 0; display: grid; align-content: center; gap: 6px; }
+.document-student-picker .field { min-width: 0; }
+.document-student-picker input[type="search"] { width: 100%; min-width: 0; min-height: 32px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--navy); font: inherit; }
+.document-student-picker input[type="search"]:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+.document-student-picker small { font-size: 10px; }
+
 .builder-buttons { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
 .report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 13px; }
 .reports-section { display: grid; gap: 2px; }

@@ -70,6 +70,55 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
+  it("muestra todos los folios físicos de cobros ordenados desde 0001, incluso mayores de 1000 y 9999", async () => {
+    const f = fixture();
+    const folioRecords = ["10000", "0099", "1001", "0002", "9999", "0001"];
+    const ids: number[] = [];
+    for (const [index, physical] of folioRecords.entries()) {
+      const result=await request(app).post("/api/payments").set("Authorization",auth).send({
+        studentId:f.student,folio:`DOCUMENT-FOLIO-${index}-${f.student}`,
+        amount:120+index,paidAt:"2026-10-17",concept:"Otros conceptos",
+        paymentMethod:"Efectivo",notes:physical
+      });
+      expect(result.status).toBe(201);
+      ids.push(result.body.billing.payments.find((p:any)=>p.folio===`DOCUMENT-FOLIO-${index}-${f.student}`).id);
+    }
+    const response=await request(app).get("/api/payments/folios").set("Authorization",auth);
+    expect(response.status).toBe(200);
+    const ours=response.body.folios.filter((row:any)=>ids.includes(row.id));
+    expect(ours.map((row:any)=>row.physical_folio)).toEqual(["0001","0002","0099","1001","9999","10000"]);
+    expect(ours.every((row:any)=>row.student_number.startsWith("DOC-"))).toBe(true);
+    expect(response.body.total).toBe(response.body.folios.length);
+    const csv=await request(app).get("/api/payments/folios/export").set("Authorization",auth);
+    expect(csv.status).toBe(200);expect(csv.text).toContain("Folio físico");
+    expect(csv.text).toContain("10000");
+    await request(app).get("/api/payments/folios").expect(401);
+  });
+
+  it("carga todos los alumnos activos y grupos para documentos, sin límite de 100 registros", async () => {
+    const sample=fixture();
+    const status=get<{id:number}>("SELECT id FROM student_statuses LIMIT 1")!.id;
+    try {
+      for(let i=1;i<=108;i++) {
+        run("INSERT INTO students(student_number,first_name,last_name,status_id,is_active) VALUES(?,?,?,?,?)",
+          `DOC-SELECT-${i}`,"Estudiante",`Selector ${i}`,status,i===108?0:1);
+      }
+      const response=await request(app).get("/api/reports/document-options").set("Authorization",auth);
+      expect(response.status).toBe(200);
+      const students=response.body.students as Array<{id:number;name:string}>;
+      expect(students.length).toBeGreaterThan(100);
+      expect(students).toEqual(expect.arrayContaining([{id:sample.student,name:expect.stringContaining("DOC-") }]));
+      expect(students.find(row=>row.name.startsWith("DOC-SELECT-1 - "))).toBeTruthy();
+      expect(students.some(row=>row.name.startsWith("DOC-SELECT-108 - "))).toBe(false);
+      expect(response.body.groups.some((group:{id:number})=>group.id===sample.group)).toBe(true);
+      expect(response.body.cycles.some((cycle:{id:number})=>cycle.id===sample.cycle)).toBe(true);
+      expect(response.body.groups.find((group:{id:number})=>group.id===sample.group)).toHaveProperty("active_cycle_id",sample.cycle);
+      await request(app).get("/api/reports/document-options").expect(401);
+    } finally {
+      run("DELETE FROM students WHERE student_number LIKE 'DOC-SELECT-%'");
+    }
+  });
+
   it("uses only the academic degree in report cards, histories and their QR snapshots without renaming either plan", async () => {
     for (const suffix of ["IFOP", "UNITEN"]) {
       const f = fixture(), programName = `LICENCIATURA EN ENFERMERIA ${suffix}`;

@@ -64,7 +64,7 @@ historial completo de movimientos. El PDF pagina cada 10 pagos y la pestaña **E
 de Excel cada 12. Cada hoja repite encabezado, datos del alumno, totales, firma, folio y QR.
 
 Al registrar o editar un pago, captura el **NÚMERO DE FOLIO FÍSICO** impreso en el recibo,
-usando cuatro dígitos del **0001 al 1000**. El sistema conserva por separado su identificador
+con al menos cuatro dígitos, desde **0001** y sin límite superior de consecutivo (por ejemplo, **1001**, **9999**, **10000**). En **Finanzas → Folios** se consultan todos los folios registrados, ordenados numéricamente de menor a mayor, y se pueden exportar en CSV. El sistema conserva por separado su identificador
 interno; los estados de cuenta muestran únicamente el folio físico.
 
 ## Asistencia y autorización para evaluar

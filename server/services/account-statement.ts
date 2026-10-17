@@ -1,4 +1,5 @@
 import path from "node:path";
+import { displayPhysicalFolio } from "./physical-folio.js";
 import type { Response } from "express";
 import ExcelJS from "exceljs";
 import { createPdf } from "./files.js";
@@ -102,12 +103,7 @@ function dateValue(value: string | null | undefined) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export function physicalFolio(value: string | null | undefined) {
-  const text = value?.trim() ?? "";
-  if (!/^\d{1,4}$/.test(text)) return "SIN FOLIO FÍSICO";
-  const number = Number(text);
-  return number >= 1 && number <= 1000 ? String(number).padStart(4, "0") : "SIN FOLIO FÍSICO";
-}
+export const physicalFolio = displayPhysicalFolio;
 
 type PdfCellOptions = {
   x: number;
