@@ -9,6 +9,7 @@ import { provisionStudentAccount } from "../services/student-account.js";
 import { generateStudentIdentity } from "../services/student-identity.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
 import { displayProgramName } from "../../shared/program-name.js";
+import { normalizePhysicalFolio } from "../services/physical-folio.js";
 
 type StudentImportRow = {
   row: number;
@@ -163,15 +164,6 @@ studentsRouter.get("/record/:id", requirePermission("students.view"), (req, res)
   res.json(record);
 });
 
-function physicalFolio(value: unknown) {
-  const digits = cleanText(value, 4).replace(/\D/g, "");
-  const number = Number(digits);
-  if (!Number.isInteger(number) || number < 1 || number > 1000) {
-    throw new ApiError(400, "El folio físico debe estar entre 0001 y 1000.");
-  }
-  return String(number).padStart(4, "0");
-}
-
 studentsRouter.post("/:id/registration-status", requirePermission("students.manage"), (req: AuthenticatedRequest, res) => {
   const studentId = asId(req.params.id, "Alumno");
   const status = req.body.status === "paid" ? "paid" : req.body.status === "pending" ? "pending" : null;
@@ -192,7 +184,7 @@ studentsRouter.post("/:id/registration-status", requirePermission("students.mana
     periodNumber
   );
   if (!curricularPeriod) throw new ApiError(400, "El semestre seleccionado no existe en el catálogo.");
-  const folio = status === "paid" ? physicalFolio(req.body.physicalFolio) : null;
+  const folio = status === "paid" ? normalizePhysicalFolio(req.body.physicalFolio) : null;
   const amount = status === "paid" ? asNumber(req.body.amount, "Monto pagado") : null;
   const paidAt = status === "paid" ? cleanText(req.body.paidAt, 10) : null;
   if (status === "paid" && (Number(amount) <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(paidAt!))) {
