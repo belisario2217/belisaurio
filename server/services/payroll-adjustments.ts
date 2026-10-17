@@ -10,7 +10,7 @@ export function payrollWithDeductions(profile:{kind:string;rate:number;weekly_ho
  const base=payrollCalculation(profile,input);
  const manual=Number(input.manualDeduction??0);
  const reason=cleanText(input.deductionReason,300);
- if(!Number.isFinite(manual)||manual<0||manual>1e8||!Number.isInteger(manual*100))throw new ApiError(400,'Ingresa un descuento válido con máximo dos decimales.');
+ if(!Number.isFinite(manual)||manual<0||manual>1e8||Math.abs(manual*100-Math.round(manual*100))>1e-6)throw new ApiError(400,'Ingresa un descuento válido con máximo dos decimales.');
  if(manual>0&&!reason)throw new ApiError(400,'Indica el motivo del descuento de nómina.');
  const items:unknown=input.loanRepayments??[];
  if(!Array.isArray(items)||items.length>50)throw new ApiError(400,'Revisa los descuentos de adelantos y préstamos.');
@@ -23,7 +23,7 @@ export function payrollWithDeductions(profile:{kind:string;rate:number;weekly_ho
   const amount=Number(value.amount),loanId=asId(value.loanId,'Adelanto o préstamo');
   if(selected.has(loanId))throw new ApiError(400,'Un préstamo solo puede descontarse una vez por nómina.');
   selected.add(loanId);
-  if(!Number.isFinite(amount)||amount<=0||!Number.isInteger(amount*100))throw new ApiError(400,'El descuento del préstamo debe ser positivo y tener máximo dos decimales.');
+  if(!Number.isFinite(amount)||amount<=0||Math.abs(amount*100-Math.round(amount*100))>1e-6)throw new ApiError(400,'El descuento del préstamo debe ser positivo y tener máximo dos decimales.');
   const loan=get<{profile_id:number;principal:number;paid:number}>(`SELECT l.profile_id,l.principal,COALESCE((SELECT SUM(r.amount) FROM payroll_loan_repayments r
    WHERE r.loan_id=l.id AND r.payment_id<>?),0) AS paid FROM payroll_loans l WHERE l.id=?`,existingPaymentId??0,loanId);
   if(!loan)throw new ApiError(404,'No se encontró el adelanto o préstamo.');
