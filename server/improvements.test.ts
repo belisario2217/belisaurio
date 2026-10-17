@@ -57,6 +57,40 @@ describe('Single-campus IFOP improvements',()=>{
    const outside=await api('get','/improvements/balance?month=2026-11');expect(outside.body.expense).toBe(0);
    const report=await api('get',`/improvements/balance/export?month=${month}`);expect(report.status).toBe(200);expect(report.text).toContain('Renta octubre');
  });
+ it('edits existing payroll with its historical rate and synchronizes or removes the linked expense',async()=>{
+   const createdProfile=await api('post','/payroll/profiles').send({kind:'administrative',fullName:'Auxiliar contable de prueba',rate:500});expect(createdProfile.status).toBe(201);
+   const profileId=createdProfile.body.id;
+   const periodData={profileId,periodStart:'2027-03-01',periodEnd:'2027-03-15',paidAt:'2027-03-15',workedDays:10,notes:'Primera quincena'};
+   const created=await api('post','/payroll/payments').send(periodData);expect(created.status).toBe(201);expect(created.body.amount).toBe(5000);
+   await api('patch',`/payroll/profiles/${profileId}`).send({rate:650}).expect(200);
+   const paymentId=created.body.id,expenseId=created.body.expenseId;
+   const preview=await api('post','/payroll/preview').send({...periodData,paymentId,workedDays:11});expect(preview.status).toBe(200);expect(preview.body.amount).toBe(5500);expect(preview.body.rate).toBe(500);
+   const modified=await api('patch',`/payroll/payments/${paymentId}`).send({...periodData,workedDays:11,paidAt:'2027-04-01',expectedOriginalAmount:5000,expectedAmount:5500,expectedRate:500});expect(modified.status).toBe(200);expect(modified.body.amount).toBe(5500);
+   expect(get<any>('SELECT amount,paid_at,rate FROM payroll_payments WHERE id=?',paymentId)).toMatchObject({amount:5500,paid_at:'2027-04-01',rate:500});
+   expect(get<any>('SELECT amount,paid_at FROM operating_expenses WHERE id=?',expenseId)).toMatchObject({amount:5500,paid_at:'2027-04-01'});
+   await api('patch',`/payroll/payments/${paymentId}`).send({...periodData,workedDays:12,expectedOriginalAmount:5000}).expect(409);
+   await api('patch',`/improvements/expenses/${expenseId}`).send({concept:'Fraude',amount:1,paidAt:'2027-04-01'}).expect(409);
+   await request(app).delete(`/api/improvements/expenses/${expenseId}`).set('Authorization',auth()).expect(409);
+   const balance=await api('get','/improvements/balance?month=2027-04');expect(balance.body.expenses.find((e:any)=>e.id===expenseId).payroll_payment_id).toBe(paymentId);
+   await request(app).delete(`/api/payroll/payments/${paymentId}`).set('Authorization',auth()).expect(204);
+   expect(get('SELECT id FROM payroll_payments WHERE id=?',paymentId)).toBeUndefined();
+   expect(get('SELECT id FROM operating_expenses WHERE id=?',expenseId)).toBeUndefined();
+   expect((await api('get','/improvements/balance?month=2027-04')).body.expenses.some((e:any)=>e.id===expenseId)).toBe(false);
+   expect(all('PRAGMA foreign_key_check')).toHaveLength(0);
+ });
+ it('updates and deletes manual expenses without changing payroll records',async()=>{
+   const created=await api('post','/improvements/expenses').send({concept:'Prueba de oficina',amount:125,paidAt:'2027-05-04',category:'operating',notes:'Recibo de prueba'});expect(created.status).toBe(201);
+   const id=created.body.id;
+   const modified=await api('patch',`/improvements/expenses/${id}`).send({concept:'Servicio administrativo',amount:250.25,paidAt:'2027-06-03',category:'other',notes:'Corregido'});expect(modified.status).toBe(200);
+   expect(get<any>('SELECT concept,amount,paid_at,notes FROM operating_expenses WHERE id=?',id)).toMatchObject({concept:'Servicio administrativo',amount:250.25,paid_at:'2027-06-03',notes:'Corregido'});
+   expect((await api('get','/improvements/balance?month=2027-05')).body.expenses.some((e:any)=>e.id===id)).toBe(false);
+   expect((await api('get','/improvements/balance?month=2027-06')).body.expenses.some((e:any)=>e.id===id)).toBe(true);
+   await request(app).delete(`/api/improvements/expenses/${id}`).set('Authorization',auth()).expect(204);
+   expect(get('SELECT id FROM operating_expenses WHERE id=?',id)).toBeUndefined();
+   await request(app).delete(`/api/improvements/expenses/${id}`).set('Authorization',auth()).expect(404);
+   await api('post','/improvements/expenses').send({concept:'Nómina manual',amount:10,paidAt:'2027-05-04',category:'payroll'}).expect(400);
+   expect(get<{n:number}>("SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type='operating_expenses' AND action='delete' AND entity_id=?",String(id))!.n).toBe(1);
+ });
  it('reads multiple spreadsheet tabs, verifies CURP birth date and remembers format rules only',async()=>{
    const headers=['Nombre completo','CURP','Teléfono'];const alphabet='0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ',base='LAPA010203MTCRRLA',curp=base+String((10-[...base].reduce((n,c,i)=>n+alphabet.indexOf(c)*(18-i),0)%10)%10);
    const rows=[['  Alma  Lara Pérez  ',curp.toLowerCase(),'(993) 111-2233']];const book=XLSX.utils.book_new();for(const name of ['Sábado','Domingo'])XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([headers,...rows]),name);
