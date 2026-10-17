@@ -554,7 +554,7 @@ describe("Aula Nova API", () => {
         paidAt: "2026-09-03",
         paymentMethod: "Efectivo",
         concept: "Colegiatura",
-        notes: "1001"
+        notes: "0"
       })
       .expect(400);
 
