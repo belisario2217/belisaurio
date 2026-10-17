@@ -13,6 +13,27 @@ import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../u
 import { displayProgramName } from "../../shared/program-name.js";
 
 export const reportsRouter = Router();
+ 
+// Opciones específicas de Documentos: no dependen del permiso de catálogos,
+// ni del listado paginado de Alumnos (que solo entrega hasta 100 por página).
+reportsRouter.get("/document-options", requirePermission("reports.view"), (_req, res) => {
+  const students = all<{id:number;student_number:string;full_name:string}>(`
+    SELECT st.id,st.student_number,
+      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name,'')) AS full_name
+    FROM students st WHERE st.is_active=1
+    ORDER BY spanish_sort(st.last_name),spanish_sort(COALESCE(st.second_last_name,'')),
+      spanish_sort(st.first_name),st.id
+  `).map(student => ({id:student.id,name:`${student.student_number} - ${student.full_name}`}));
+  const groups = all<{id:number;name:string;active_cycle_id:number|null;plan_id:number|null}>(`
+    SELECT id,name,active_cycle_id,plan_id FROM groups WHERE is_active=1
+    ORDER BY spanish_sort(name),id
+  `);
+  const cycles = all<{id:number;name:string}>(`
+    SELECT id,name FROM school_cycles WHERE is_active=1 ORDER BY spanish_sort(name),id
+  `);
+  res.json({students,groups,cycles});
+});
+
 
 const studentListFieldDefinitions = {
   matricula: { label: "Matrícula", expression: "st.student_number" },
