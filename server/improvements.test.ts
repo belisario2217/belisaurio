@@ -104,6 +104,62 @@ describe('Single-campus IFOP improvements',()=>{
    await api('post','/improvements/expenses').send({concept:'Nómina manual',amount:10,paidAt:'2027-05-04',category:'payroll'}).expect(400);
    expect(get<{n:number}>("SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type='operating_expenses' AND action='delete' AND entity_id=?",String(id))!.n).toBe(1);
  });
+ it('registers advances, loans and repayments for administrative staff without double-counting cash expenses',async()=>{
+   const profile=await api('post','/payroll/profiles').send({kind:'administrative',fullName:'Auxiliar con anticipo de prueba',rate:500});expect(profile.status).toBe(201);
+   const profileId=profile.body.id,issuedAt='2028-01-07';
+   const first=await api('post','/payroll/loans').send({profileId,kind:'advance',amount:1200,issuedAt,notes:'Autorizado'});expect(first.status).toBe(201);
+   const second=await api('post','/payroll/loans').send({profileId,kind:'loan',amount:800,issuedAt,notes:'Préstamo de prueba'});expect(second.status).toBe(201);
+   const opening=(await api('get','/improvements/balance?month=2028-01')).body;
+   expect(opening.expenses.find((x:any)=>x.id===first.body.expenseId).payroll_loan_id).toBe(first.body.id);
+   expect(opening.expenses.find((x:any)=>x.id===second.body.expenseId).payroll_loan_id).toBe(second.body.id);
+   expect(opening.expense).toBe(2000);
+   await api('patch',`/improvements/expenses/${first.body.expenseId}`).send({concept:'Alterado',amount:1,paidAt:issuedAt}).expect(409);
+   await request(app).delete(`/api/improvements/expenses/${first.body.expenseId}`).set('Authorization',auth()).expect(409);
+   const form={profileId,periodStart:'2028-01-01',periodEnd:'2028-01-15',paidAt:'2028-01-15',workedDays:10,manualDeduction:100,deductionReason:'Falta autorizada',
+    loanRepayments:[{loanId:first.body.id,amount:700},{loanId:second.body.id,amount:200}]};
+   const preview=await api('post','/payroll/preview').send(form);expect(preview.status).toBe(200);
+   expect(preview.body).toMatchObject({grossAmount:5000,manualDeduction:100,loanDeduction:900,amount:4000,netAmount:4000});
+   const paid=await api('post','/payroll/payments').send({...form,expectedAmount:4000,expectedRate:500});expect(paid.status).toBe(201);
+   const monthly=(await api('get','/improvements/balance?month=2028-01')).body;
+   expect(monthly.expense).toBe(6000);
+   expect(monthly.expenses.find((x:any)=>x.id===paid.body.expenseId).amount).toBe(4000);
+   const outstanding=(await api('get',`/payroll/loans?profileId=${profileId}`)).body;
+   expect(outstanding.find((x:any)=>x.id===first.body.id).balance).toBe(500);
+   expect(outstanding.find((x:any)=>x.id===second.body.id).balance).toBe(600);
+   const paymentRow=(await api('get','/payroll/payments?month=2028-01')).body.find((x:any)=>x.id===paid.body.id);
+   expect(paymentRow.loanRepayments).toHaveLength(2);
+   const csv=await api('get','/payroll/export?month=2028-01&kind=administrative');expect(csv.text).toContain('Sueldo bruto');expect(csv.text).toContain('Descuentos por préstamos');
+   await api('patch',`/payroll/profiles/${profileId}`).send({rate:800}).expect(200);
+   const corrected=await api('patch',`/payroll/payments/${paid.body.id}`).send({...form,manualDeduction:200,loanRepayments:[{loanId:first.body.id,amount:900},{loanId:second.body.id,amount:100}],
+     expectedOriginalAmount:4000,expectedAmount:3800,expectedRate:500});expect(corrected.status).toBe(200);
+   expect(corrected.body).toMatchObject({grossAmount:5000,loanDeduction:1000,manualDeduction:200,netAmount:3800});
+   const current=(await api('get',`/payroll/loans?profileId=${profileId}`)).body;
+   expect(current.find((x:any)=>x.id===first.body.id).balance).toBe(300);
+   expect(current.find((x:any)=>x.id===second.body.id).balance).toBe(700);
+   await api('post','/payroll/preview').send({...form,paymentId:paid.body.id,loanRepayments:[{loanId:first.body.id,amount:1201}]}).expect(409);
+   await api('post','/payroll/preview').send({...form,paymentId:paid.body.id,loanRepayments:[{loanId:first.body.id,amount:600},{loanId:first.body.id,amount:10}]}).expect(400);
+   await api('post','/payroll/preview').send({...form,paymentId:paid.body.id,manualDeduction:5000,loanRepayments:[]}).expect(400);
+   await request(app).delete(`/api/payroll/loans/${first.body.id}`).set('Authorization',auth()).expect(409);
+   await request(app).delete(`/api/payroll/payments/${paid.body.id}`).set('Authorization',auth()).expect(204);
+   const restored=(await api('get',`/payroll/loans?profileId=${profileId}`)).body;
+   expect(restored.find((x:any)=>x.id===first.body.id).balance).toBe(1200);
+   expect(restored.find((x:any)=>x.id===second.body.id).balance).toBe(800);
+   expect((await api('get','/improvements/balance?month=2028-01')).body.expense).toBe(2000);
+   await request(app).delete(`/api/payroll/loans/${first.body.id}`).set('Authorization',auth()).expect(204);
+   expect((await api('get','/improvements/balance?month=2028-01')).body.expense).toBe(800);
+   expect(all('PRAGMA foreign_key_check')).toHaveLength(0);
+ });
+ it('supports payroll deductions for teachers and validates repayment ownership',async()=>{
+   const existing=get<{id:number}>("SELECT id FROM payroll_profiles WHERE kind='teacher' AND is_active=1 ORDER BY id LIMIT 1")!;
+   const profileId=existing.id;
+   await api('patch',`/payroll/profiles/${profileId}`).send({rate:100,weeklyHours:10}).expect(200);
+   const loan=await api('post','/payroll/loans').send({profileId,kind:'advance',amount:300,issuedAt:'2028-02-03'});expect(loan.status).toBe(201);
+   const form={profileId,periodStart:'2028-02-01',periodEnd:'2028-02-28',paidAt:'2028-02-25',weeks:2,weeklyHours:10,manualDeduction:100,deductionReason:'Descuento autorizado',loanRepayments:[{loanId:loan.body.id,amount:150}]};
+   const preview=await api('post','/payroll/preview').send(form);expect(preview.body).toMatchObject({grossAmount:2000,amount:1750});
+   await api('post','/payroll/payments').send(form).expect(201);
+   const malicious=await api('post','/payroll/preview').send({...form,loanRepayments:[{loanId:1,amount:1} ]});expect([400,404]).toContain(malicious.status);
+   await api('post','/payroll/preview').send({...form,manualDeduction:1,deductionReason:''}).expect(400);
+ });
  it('reads multiple spreadsheet tabs, verifies CURP birth date and remembers format rules only',async()=>{
    const headers=['Nombre completo','CURP','Teléfono'];const alphabet='0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ',base='LAPA010203MTCRRLA',curp=base+String((10-[...base].reduce((n,c,i)=>n+alphabet.indexOf(c)*(18-i),0)%10)%10);
    const rows=[['  Alma  Lara Pérez  ',curp.toLowerCase(),'(993) 111-2233']];const book=XLSX.utils.book_new();for(const name of ['Sábado','Domingo'])XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([headers,...rows]),name);

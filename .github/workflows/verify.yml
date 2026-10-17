@@ -1,0 +1,23 @@
+name: Validación de plataforma
+on:
+  push:
+    branches: [main, feature/descuentos-adelantos-prestamos-nomina]
+  pull_request:
+    branches: [main]
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
