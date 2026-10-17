@@ -486,7 +486,7 @@ function registeredPhysicalFolios() {
     WHERE srs.status='paid' AND srs.payment_id IS NULL
       AND srs.physical_folio IS NOT NULL AND TRIM(srs.physical_folio)<>''
   `);
-  return recorded.filter(row => /^\\d+$/.test(String(row.physical_folio ?? "")) && /[1-9]/.test(row.physical_folio))
+  return recorded.filter(row => /^\d+$/.test(String(row.physical_folio ?? "")) && /[1-9]/.test(row.physical_folio))
     .map(row => ({...row,physical_folio:normalizePhysicalFolio(row.physical_folio)}))
     .sort((a,b)=>comparePhysicalFolios(a.physical_folio,b.physical_folio) || a.paid_at.localeCompare(b.paid_at) || a.id-b.id);
 }
