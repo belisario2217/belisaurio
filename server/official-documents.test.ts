@@ -70,6 +70,31 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
+  it("muestra todos los folios físicos de cobros ordenados desde 0001, incluso mayores de 1000 y 9999", async () => {
+    const f = fixture();
+    const folioRecords = ["10000", "0099", "1001", "0002", "9999", "0001"];
+    const ids: number[] = [];
+    for (const [index, physical] of folioRecords.entries()) {
+      const result=await request(app).post("/api/payments").set("Authorization",auth).send({
+        studentId:f.student,folio:`DOCUMENT-FOLIO-${index}-${f.student}`,
+        amount:120+index,paidAt:"2026-10-17",concept:"Otros conceptos",
+        paymentMethod:"Efectivo",notes:physical
+      });
+      expect(result.status).toBe(201);
+      ids.push(result.body.billing.payments.find((p:any)=>p.folio===`DOCUMENT-FOLIO-${index}-${f.student}`).id);
+    }
+    const response=await request(app).get("/api/payments/folios").set("Authorization",auth);
+    expect(response.status).toBe(200);
+    const ours=response.body.folios.filter((row:any)=>ids.includes(row.id));
+    expect(ours.map((row:any)=>row.physical_folio)).toEqual(["0001","0002","0099","1001","9999","10000"]);
+    expect(ours.every((row:any)=>row.student_number.startsWith("DOC-"))).toBe(true);
+    expect(response.body.total).toBe(response.body.folios.length);
+    const csv=await request(app).get("/api/payments/folios/export").set("Authorization",auth);
+    expect(csv.status).toBe(200);expect(csv.text).toContain("Folio físico");
+    expect(csv.text).toContain("10000");
+    await request(app).get("/api/payments/folios").expect(401);
+  });
+
   it("carga todos los alumnos activos y grupos para documentos, sin límite de 100 registros", async () => {
     const sample=fixture();
     const status=get<{id:number}>("SELECT id FROM student_statuses LIMIT 1")!.id;
