@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { all, get, run } from "../db.js";
+import { all, get, run, transaction } from "../db.js";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { ApiError, asId, cleanText, sendCsv } from "../utils.js";
 import { isTeacherUser, teacherIdForUser } from "../services/teacher-scope.js";
@@ -95,30 +95,38 @@ function expenseValues(body:any){
  const chosen=conceptId?get<{category:string}>('SELECT category FROM expense_concepts WHERE id=? AND is_active=1',conceptId):null;
  if(conceptId&&!chosen)throw new ApiError(400,'El concepto de egreso no está activo.');
  const category=chosen?.category??String(body.category??'operating');
- if(!concept||!Number.isFinite(amount)||amount<=0||amount>1e8||!['operating','other'].includes(category))throw new ApiError(400,'Revisa el concepto, importe y categoría. Los egresos de nómina se administran desde Nómina.');
+ if(!concept||!Number.isFinite(amount)||amount<0.01||amount>1e8||!['operating','other'].includes(category))throw new ApiError(400,'Revisa el concepto, importe y categoría. Los egresos de nómina se administran desde Nómina.');
  return {concept,amount:Math.round(amount*100)/100,paidAt,category,conceptId,notes:cleanText(body.notes,500)};
 }
 improvementsRouter.post("/expenses", requirePermission("payments.manage"), (req: AuthenticatedRequest, res) => {
  const p=expenseValues(req.body);
- const result=run("INSERT INTO operating_expenses(concept,category,amount,paid_at,notes,created_by,concept_id) VALUES(?,?,?,?,?,?,?)",p.concept,p.category,p.amount,p.paidAt,p.notes,req.user!.id,p.conceptId);
- logActivity(req,'create','operating_expenses',Number(result.lastInsertRowid),{amount:p.amount,category:p.category});
- res.status(201).json({id:Number(result.lastInsertRowid)});
+ const id=transaction(()=>{
+  const result=run("INSERT INTO operating_expenses(concept,category,amount,paid_at,notes,created_by,concept_id) VALUES(?,?,?,?,?,?,?)",p.concept,p.category,p.amount,p.paidAt,p.notes,req.user!.id,p.conceptId);
+  const id=Number(result.lastInsertRowid);
+  logActivity(req,'create','operating_expenses',id,{amount:p.amount,category:p.category});
+  return id;
+ });
+ res.status(201).json({id});
 });
 improvementsRouter.patch("/expenses/:id",requirePermission("payments.manage"),(req:AuthenticatedRequest,res)=>{
  const id=asId(req.params.id,'Egreso'),previous=get<any>('SELECT * FROM operating_expenses WHERE id=?',id);
  if(!previous)throw new ApiError(404,'No se encontró el egreso.');
  if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a un pago de nómina. Edítalo desde Nómina.');
  const p=expenseValues(req.body);
- run('UPDATE operating_expenses SET concept=?,category=?,amount=?,paid_at=?,notes=?,concept_id=? WHERE id=?',p.concept,p.category,p.amount,p.paidAt,p.notes,p.conceptId,id);
- logActivity(req,'update','operating_expenses',id,{before:{amount:previous.amount,paidAt:previous.paid_at},after:{amount:p.amount,paidAt:p.paidAt}});
+ transaction(()=>{
+  run('UPDATE operating_expenses SET concept=?,category=?,amount=?,paid_at=?,notes=?,concept_id=? WHERE id=?',p.concept,p.category,p.amount,p.paidAt,p.notes,p.conceptId,id);
+  logActivity(req,'update','operating_expenses',id,{before:{amount:previous.amount,paidAt:previous.paid_at},after:{amount:p.amount,paidAt:p.paidAt}});
+ });
  res.json({id,message:'Egreso actualizado.'});
 });
 improvementsRouter.delete("/expenses/:id",requirePermission("payments.manage"),(req:AuthenticatedRequest,res)=>{
  const id=asId(req.params.id,'Egreso'),previous=get<any>('SELECT * FROM operating_expenses WHERE id=?',id);
  if(!previous)throw new ApiError(404,'No se encontró el egreso.');
  if(get('SELECT id FROM payroll_payments WHERE expense_id=?',id))throw new ApiError(409,'Este egreso corresponde a un pago de nómina. Elimínalo desde Nómina.');
- run('DELETE FROM operating_expenses WHERE id=?',id);
- logActivity(req,'delete','operating_expenses',id,{concept:previous.concept,amount:previous.amount});
+ transaction(()=>{
+  run('DELETE FROM operating_expenses WHERE id=?',id);
+  logActivity(req,'delete','operating_expenses',id,{concept:previous.concept,amount:previous.amount});
+ });
  res.status(204).end();
 });
 
