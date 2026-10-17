@@ -84,7 +84,7 @@ function monthRange(input: unknown) {
 improvementsRouter.get("/balance", requirePermission("payments.view"), (req, res) => {
   const range = monthRange(req.query.month);
   const income = get<{amount:number}>("SELECT COALESCE(SUM(amount),0) AS amount FROM student_payments WHERE paid_at>=? AND paid_at<?", range.start,range.end)!.amount;
-  const expenses = all<any>("SELECT * FROM operating_expenses WHERE paid_at>=? AND paid_at<? ORDER BY paid_at DESC,id DESC",range.start,range.end);
+  const expenses = all<any>("SELECT oe.*, pp.id AS payroll_payment_id FROM operating_expenses oe LEFT JOIN payroll_payments pp ON pp.expense_id=oe.id WHERE oe.paid_at>=? AND oe.paid_at<? ORDER BY oe.paid_at DESC,oe.id DESC",range.start,range.end);
   const breakdown = all("SELECT COALESCE(ec.name, CASE oe.category WHEN 'payroll' THEN 'Nómina' WHEN 'operating' THEN 'Operación' ELSE 'Otro' END) AS name,SUM(oe.amount) AS amount FROM operating_expenses oe LEFT JOIN expense_concepts ec ON ec.id=oe.concept_id WHERE oe.paid_at>=? AND oe.paid_at<? GROUP BY 1 ORDER BY spanish_sort(name)",range.start,range.end);
   const expense = expenses.reduce((sum,row)=>sum+Number(row.amount),0);
   res.json({ month: range.month, income, expense, balance: Math.round((income-expense)*100)/100, expenses, breakdown });
