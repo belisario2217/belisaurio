@@ -70,6 +70,30 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
+  it("carga todos los alumnos activos y grupos para documentos, sin límite de 100 registros", async () => {
+    const sample=fixture();
+    const status=get<{id:number}>("SELECT id FROM student_statuses LIMIT 1")!.id;
+    try {
+      for(let i=1;i<=108;i++) {
+        run("INSERT INTO students(student_number,first_name,last_name,status_id,is_active) VALUES(?,?,?,?,?)",
+          `DOC-SELECT-${i}`,"Estudiante",`Selector ${i}`,status,i===108?0:1);
+      }
+      const response=await request(app).get("/api/reports/document-options").set("Authorization",auth);
+      expect(response.status).toBe(200);
+      const students=response.body.students as Array<{id:number;name:string}>;
+      expect(students.length).toBeGreaterThan(100);
+      expect(students).toEqual(expect.arrayContaining([{id:sample.student,name:expect.stringContaining("DOC-") }]));
+      expect(students.find(row=>row.name.startsWith("DOC-SELECT-1 - "))).toBeTruthy();
+      expect(students.some(row=>row.name.startsWith("DOC-SELECT-108 - "))).toBe(false);
+      expect(response.body.groups.some((group:{id:number})=>group.id===sample.group)).toBe(true);
+      expect(response.body.cycles.some((cycle:{id:number})=>cycle.id===sample.cycle)).toBe(true);
+      expect(response.body.groups.find((group:{id:number})=>group.id===sample.group)).toHaveProperty("active_cycle_id",sample.cycle);
+      await request(app).get("/api/reports/document-options").expect(401);
+    } finally {
+      run("DELETE FROM students WHERE student_number LIKE 'DOC-SELECT-%'");
+    }
+  });
+
   it("uses only the academic degree in report cards, histories and their QR snapshots without renaming either plan", async () => {
     for (const suffix of ["IFOP", "UNITEN"]) {
       const f = fixture(), programName = `LICENCIATURA EN ENFERMERIA ${suffix}`;
