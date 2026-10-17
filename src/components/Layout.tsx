@@ -18,6 +18,7 @@ const navItems = [
   { to: "/calificaciones", label: "Calificaciones", icon: BookOpenCheck, permission: "grades.view" },
   { to: "/asistencia", label: "Asistencia", icon: CalendarCheck, permission: "attendance.view" },
   { to: "/cobros", label: "Cobros", icon: ReceiptText, permission: "payments.view" },
+  { to: "/folios", label: "Folios", icon: BookCopy, permission: "payments.view" },
   { to: "/colegiaturas-mensuales", label: "Colegiaturas mensuales", icon: TableProperties, permission: "tuition.manage" },
   { to: "/mensajes-admin", label: "Mensajes", icon: Megaphone, permission: "messages.view" },
   { to: "/analiticas", label: "Analíticas", icon: BarChart3, permission: "analytics.view" },
@@ -46,6 +47,7 @@ const titles: Record<string, string> = {
   "/calificaciones": "Captura de calificaciones",
   "/asistencia": "Asistencia diaria",
   "/cobros": "Registro de cobros",
+  "/folios": "Folios de pago",
   "/colegiaturas-mensuales": "Colegiaturas mensuales",
   "/mensajes-admin": "Mensajes importantes",
   "/analiticas": "Analíticas académicas",
@@ -70,7 +72,7 @@ const titles: Record<string, string> = {
 const sections = [
   { name: "Inicio", paths: ["/"] },
   { name: "Control académico", paths: ["/alumnos", "/grupos", "/calificaciones", "/asistencia", "/mi-avance", "/mis-calificaciones", "/mi-asistencia"] },
-  { name: "Finanzas", paths: ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"] },
+  { name: "Finanzas", paths: ["/cobros", "/folios", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"] },
   { name: "Información y documentos", paths: ["/reportes", "/documentos", "/credenciales", "/mi-credencial", "/analiticas", "/asistente-importacion"] },
   { name: "Comunicación", paths: ["/mensajes-admin", "/mensajes"] },
   { name: "Administración", paths: ["/catalogos", "/planes", "/usuarios", "/configuracion"] }
