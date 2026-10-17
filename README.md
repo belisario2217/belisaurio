@@ -96,7 +96,7 @@ por QR. La vigencia termina al cerrar el ciclo activo, con un máximo de seis me
 - Bloqueo de captura e historial de cada modificación.
 - Exportación de alumnos y calificaciones a XLSX, CSV y PDF.
 - Estados de cuenta individuales en PDF carta y Excel, con identidad institucional, total pagado y código de verificación.
-- Folio físico de cobro del 0001 al 1000, independiente del identificador interno generado por el sistema.
+- Folio físico de cobro consecutivo desde 0001, sin límite superior, independiente del identificador interno; sección «Folios» para consultar todos los folios registrados de menor a mayor y exportarlos en CSV.
 - [Asistencia diaria por alumno y grupo](docs/ASISTENCIA-DIARIA.md), común a todas sus materias, con borrador, confirmación del día y resumen mensual en el portal del alumno.
 - [Importación del acta de calificaciones por materia](docs/IMPORTAR-ACTAS.md), con filtros por grupo, semestres y materias, vista previa y tres parciales visibles para el alumno.
 - Restricción docente por correo: cada docente solo consulta y captura asistencia y calificaciones de sus materias asignadas.
