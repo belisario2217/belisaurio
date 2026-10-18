@@ -67,6 +67,28 @@ Al registrar o editar un pago, captura el **NÚMERO DE FOLIO FÍSICO** impreso e
 con al menos cuatro dígitos, desde **0001** y sin límite superior de consecutivo (por ejemplo, **1001**, **9999**, **10000**). En **Finanzas → Folios** se consultan todos los folios registrados, ordenados numéricamente de menor a mayor, y se pueden exportar en CSV. El sistema conserva por separado su identificador
 interno; los estados de cuenta muestran únicamente el folio físico.
 
+### Ingresos de caja y meses cubiertos
+
+Cada recibo se contabiliza una sola vez en el mes de su **fecha real de ingreso a
+caja**. En Cobros, captura el importe total recibido, el folio y el primer y último
+mes que cubre. Por ejemplo, $6,000 recibidos en septiembre para cubrir seis meses
+son un ingreso de septiembre; no vuelven a sumarse a octubre ni a los meses siguientes.
+La tabla de Colegiaturas conserva los meses cubiertos, pero marcar sus casillas no
+crea recibos ni asigna fechas de caja. Un mes asociado a un recibo se corrige desde
+Cobros o Folios, para no borrar ingresos accidentalmente desde esa tabla.
+
+La actualización identifica los movimientos generados por la tabla anterior con
+su folio automático y fecha calculada: conserva sus datos y cobertura, pero los
+clasifica como cobertura administrativa, fuera de los ingresos. La clasificación
+queda registrada para auditoría. Si ese registro era la
+única captura de un cobro real, registra el recibo en Cobros usando su importe y
+fecha comprobados; el sistema no inventa la fecha de caja.
+
+En **Folios**, puedes aplicar **Desde el folio**, exportar CSV o **Descargar PDF**.
+**PDF desde 0460** descarga directamente todos los registros desde el 0460 inclusive,
+en orden numérico ascendente. No se inventan folios faltantes. El PDF indica la fecha
+de ingreso y los meses cubiertos, y distingue registros manuales sin ingreso vinculado.
+
 En **Finanzas → Folios**, el personal con permiso para administrar cobros puede
 usar **Eliminar** en el registro que necesita corregir. Revisa el alumno, importe,
 fecha y concepto y confirma **Eliminar registro**. Se elimina únicamente ese cobro
