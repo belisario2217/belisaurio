@@ -67,6 +67,16 @@ Al registrar o editar un pago, captura el **NÚMERO DE FOLIO FÍSICO** impreso e
 con al menos cuatro dígitos, desde **0001** y sin límite superior de consecutivo (por ejemplo, **1001**, **9999**, **10000**). En **Finanzas → Folios** se consultan todos los folios registrados, ordenados numéricamente de menor a mayor, y se pueden exportar en CSV. El sistema conserva por separado su identificador
 interno; los estados de cuenta muestran únicamente el folio físico.
 
+En **Finanzas → Folios**, el personal con permiso para administrar cobros puede
+usar **Eliminar** en el registro que necesita corregir. Revisa el alumno, importe,
+fecha y concepto y confirma **Eliminar registro**. Se elimina únicamente ese cobro
+y se actualizan el estado de cuenta, el portal del alumno, los ingresos y el balance.
+Si existe otro pago válido del mismo mes o inscripción, se conserva; si era el único,
+la colegiatura o inscripción vuelve a quedar pendiente. Los registros manuales de
+inscripción sin pago asociado también pueden eliminarse. La acción queda en bitácora.
+Los estados de cuenta emitidos anteriormente conservan su información de emisión;
+descarga uno nuevo para consultar los importes corregidos.
+
 ## Asistencia y autorización para evaluar
 
 La sección **Asistencia** muestra al docente únicamente sus materias y grupos. El correo de su
