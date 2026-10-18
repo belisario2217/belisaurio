@@ -429,6 +429,34 @@ function unlinkTuitionChargePayment(paymentId: number) {
   );
 }
 
+/** Remove the receipt and its financial links together, keeping any other real payments. */
+function deletePaymentRecord(id: number, req: AuthenticatedRequest) {
+  return transaction(() => {
+    const payment = get<{student_id:number;folio:string;amount:number;notes:string|null}>("SELECT * FROM student_payments WHERE id = ?", id);
+    if (!payment) throw new ApiError(404, "El pago ya no existe.");
+    const charges = all<{student_id:number;billing_month:string}>(
+      "SELECT student_id,billing_month FROM student_tuition_charges WHERE payment_id = ?", id);
+    const registrations = all("SELECT * FROM student_registration_status WHERE payment_id = ?", id);
+    unlinkTuitionChargePayment(id);
+    // ON DELETE SET NULL alone leaves a paid manual receipt that reappears in Folios.
+    run("DELETE FROM student_registration_status WHERE payment_id = ?", id);
+    run("DELETE FROM student_payments WHERE id = ?", id);
+    for (const charge of charges) {
+      const remaining = get<{id:number;enrollment_id:number|null;amount:number;paid_at:string;notes:string|null}>(
+        `SELECT id,enrollment_id,amount,paid_at,notes FROM student_payments
+         WHERE student_id = ? AND covered_month = ? AND concept_type = 'tuition'
+         ORDER BY paid_at DESC,id DESC LIMIT 1`, charge.student_id, charge.billing_month);
+      if (remaining) syncTuitionChargePayment({ studentId: charge.student_id, enrollmentId: remaining.enrollment_id,
+        paymentId: remaining.id, amount: remaining.amount, coveredMonth: charge.billing_month,
+        paidAt: remaining.paid_at, notes: remaining.notes, userId: req.user!.id });
+      else run("UPDATE student_tuition_charges SET notes = NULL,updated_by = ? WHERE student_id = ? AND billing_month = ?",
+        req.user!.id, charge.student_id, charge.billing_month);
+    }
+    logActivity(req, "delete", "student_payments", id, { ...payment, registrations });
+    return payment.student_id;
+  });
+}
+
 function reportRows(month: string, groupId?: number) {
   const params: Array<string | number> = [month];
   const clauses = ["substr(sp.paid_at, 1, 7) = ?"];
@@ -502,6 +530,23 @@ paymentsRouter.get("/folios/export", requirePermission("payments.export"), (_req
   }));
   const headers=Object.keys(rows[0]??{"Folio físico":"","Fecha":"","Matrícula":"","Alumno":"","Grupo":"","Concepto":"","Método":"","Monto":"","Folio interno":""});
   sendCsv(res,"folios-de-pago.csv",headers,rows.map(row=>headers.map(header=>row[header as keyof typeof row])));
+});
+paymentsRouter.delete("/folios/:source/:id", requirePermission("payments.manage"), (req: AuthenticatedRequest, res) => {
+  const id = asId(req.params.id, "Registro de folio");
+  if (req.params.source === "payment") {
+    deletePaymentRecord(id, req);
+  } else if (req.params.source === "registration") {
+    transaction(() => {
+      const registration = get<{payment_id:number|null;status:string}>("SELECT * FROM student_registration_status WHERE id = ?", id);
+      if (!registration) throw new ApiError(404, "El registro de folio ya no existe.");
+      if (registration.payment_id || registration.status !== "paid") throw new ApiError(409, "El registro cambió. Actualiza los folios antes de eliminarlo.");
+      run("DELETE FROM student_registration_status WHERE id = ?", id);
+      logActivity(req, "delete", "student_registration_status", id, registration);
+    });
+  } else {
+    throw new ApiError(400, "El tipo de registro de folio no es válido.");
+  }
+  res.status(204).end();
 });
 
 paymentsRouter.get("/students", requirePermission("payments.view"), (req, res) => {
@@ -1091,12 +1136,6 @@ paymentsRouter.patch("/:id", requirePermission("payments.manage"), (req: Authent
 
 paymentsRouter.delete("/:id", requirePermission("payments.manage"), (req: AuthenticatedRequest, res) => {
   const id = asId(req.params.id, "Pago");
-  const payment = get<{ student_id: number; folio: string; amount: number }>("SELECT student_id, folio, amount FROM student_payments WHERE id = ?", id);
-  if (!payment) throw new ApiError(404, "El pago ya no existe.");
-  transaction(() => {
-    unlinkTuitionChargePayment(id);
-    run("DELETE FROM student_payments WHERE id = ?", id);
-  });
-  logActivity(req, "delete", "student_payments", id, payment);
+  deletePaymentRecord(id, req);
   res.status(204).end();
 });
