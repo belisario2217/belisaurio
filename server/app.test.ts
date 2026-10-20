@@ -705,9 +705,11 @@ describe("Aula Nova API", () => {
     const afterGridPayment = await request(app)
       .get(`/api/payments/student/${studentId}`)
       .set("Authorization", `Bearer ${token}`);
-    expect(afterGridPayment.body.billing.payments).toHaveLength(0);
-    expect(afterGridPayment.body.billing.tuitionCharges.find((charge:any)=>charge.billing_month === "2026-08"))
-      .toMatchObject({status:"paid",payment_id:null,amount:1000});
+    const augustPayment = afterGridPayment.body.billing.payments.find(
+      (payment: any) => payment.folio === "COL-AN26001-202608"
+    );
+    expect(augustPayment.concept).toBe("Colegiatura agosto 2026");
+    expect(augustPayment.covered_month).toBe("2026-08");
 
     tuitionGridPayment.rows[0].months[0].amount = 1100;
     await request(app)
@@ -718,9 +720,11 @@ describe("Aula Nova API", () => {
     const afterGridUpdate = await request(app)
       .get(`/api/payments/student/${studentId}`)
       .set("Authorization", `Bearer ${token}`);
-    expect(afterGridUpdate.body.billing.payments).toHaveLength(0);
-    expect(afterGridUpdate.body.billing.tuitionCharges.find((charge:any)=>charge.billing_month === "2026-08"))
-      .toMatchObject({status:"paid",payment_id:null,amount:1100});
+    const updatedAugustPayment = afterGridUpdate.body.billing.payments.find(
+      (payment: any) => payment.folio === "COL-AN26001-202608"
+    );
+    expect(updatedAugustPayment.concept).toBe("Colegiatura agosto 2026");
+    expect(updatedAugustPayment.amount).toBe(1100);
 
     tuitionGridPayment.rows[0].months[0].paid = false;
     await request(app)
