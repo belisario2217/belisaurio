@@ -23,8 +23,6 @@ export type PaymentRecord = {
   concept: string;
   concept_type: "tuition" | "enrollment" | "reenrollment" | "other";
   covered_month: string | null;
-  covered_through_month?: string | null;
-  covered_months: string[];
   registration_period_number: number | null;
   notes: string | null;
   created_at: string;
@@ -144,14 +142,12 @@ export function listStudentPayments(source: BillingSource): PaymentRecord[] {
   return all<PaymentRecord>(
     `SELECT id, student_id, enrollment_id, plan_id, folio, amount, paid_at, payment_method, concept,
      COALESCE(concept_type, CASE WHEN lower(concept) LIKE '%colegiatura%' THEN 'tuition' ELSE 'other' END) AS concept_type,
-     covered_month, covered_through_month, registration_period_number, notes, created_at, updated_at
+     covered_month, registration_period_number, notes, created_at, updated_at
      FROM student_payments
-     WHERE student_id = ? AND payment_kind = 'receipt'
+     WHERE student_id = ?
      ORDER BY paid_at DESC, id DESC`,
     source.studentId
-  ).map(payment => ({ ...payment, covered_months: all<{billing_month:string}>(
-    "SELECT billing_month FROM student_tuition_charges WHERE payment_id=? ORDER BY billing_month", payment.id
-  ).map(row => row.billing_month) }));
+  );
 }
 
 export function listTuitionCharges(source: BillingSource): TuitionChargeRecord[] {
@@ -184,10 +180,8 @@ export function summarizeBilling(source: BillingSource, payments: PaymentRecord[
   const tuitionPaidAmount = money(tuitionPayments.reduce((sum, payment) => sum + Number(payment.amount), 0));
   const expectedAmount = money(charges.reduce((sum, charge) => sum + Number(charge.amount), 0));
   const accruedAmount = money(accruedCharges.reduce((sum, charge) => sum + Number(charge.amount), 0));
-  const coveredByStatus = money(paidCharges.filter(charge => accruedCharges.includes(charge)).reduce((sum, charge) => sum + Number(charge.amount), 0));
-  const unappliedCredit = money(tuitionPayments.filter(payment => !payment.covered_month
-    && !charges.some(charge => charge.payment_id === payment.id)).reduce((sum,payment) => sum + Number(payment.amount),0));
-  const balance = money(Math.max(0, accruedAmount - coveredByStatus - unappliedCredit));
+  const coveredByStatus = money(paidCharges.reduce((sum, charge) => sum + Number(charge.amount), 0));
+  const balance = money(Math.max(0, accruedAmount - Math.max(tuitionPaidAmount, coveredByStatus)));
   return {
     tuitionAmount,
     expectedPayments: totalInstallments,
@@ -211,7 +205,7 @@ export function buildTuitionSchedule(charges: TuitionChargeRecord[], payments: P
       : payments.find((item) => item.concept_type === "tuition" && item.covered_month === charge.billing_month);
     const paid = charge.status === "paid" || charge.status === "waived" || Boolean(payment);
     const due = (charge.due_date ?? `${charge.billing_month}-10`) <= currentDate();
-    const paidAmount = paid ? Number(charge.amount) : 0;
+    const paidAmount = paid ? Number(payment?.amount ?? charge.amount) : 0;
     const pendingAmount = !paid && due
       ? Math.max(0, Number(charge.amount) - paidAmount)
       : 0;

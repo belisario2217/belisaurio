@@ -15,7 +15,6 @@ import { normalizePhysicalFolio, comparePhysicalFolios } from "../services/physi
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import multer from "multer";
 import { issueDocument } from "../services/document-verification.js";
-import { sendFolioReport } from "../services/folio-report.js";
 
 export const paymentsRouter = Router();
 
@@ -153,12 +152,12 @@ function uniqueImportFolio(studentNumber: string, originalFolio: string, paidAt:
 }
 
 function existingPaymentForImport(item: PaymentImportRow) {
-  const byGeneratedFolio = get<{ id: number }>("SELECT id FROM student_payments WHERE folio = ? AND payment_kind='receipt'", item.folio);
+  const byGeneratedFolio = get<{ id: number }>("SELECT id FROM student_payments WHERE folio = ?", item.folio);
   if (byGeneratedFolio) return byGeneratedFolio.id;
   const originalKey = receiptKey(item.originalFolio);
   if (originalKey) {
     const byOriginalReceipt = all<{ id: number; notes: string | null }>(
-      "SELECT id, notes FROM student_payments WHERE student_id = ? AND amount = ? AND payment_kind='receipt'",
+      "SELECT id, notes FROM student_payments WHERE student_id = ? AND amount = ?",
       item.studentId,
       item.amount
     ).find((payment) => receiptKey(payment.notes) === originalKey);
@@ -166,7 +165,7 @@ function existingPaymentForImport(item: PaymentImportRow) {
   }
   const bySamePayment = get<{ id: number }>(
     `SELECT id FROM student_payments
-     WHERE payment_kind='receipt' AND student_id = ? AND paid_at = ? AND amount = ? AND UPPER(TRIM(concept)) = UPPER(TRIM(?))
+     WHERE student_id = ? AND paid_at = ? AND amount = ? AND UPPER(TRIM(concept)) = UPPER(TRIM(?))
      ORDER BY id LIMIT 1`,
     item.studentId,
     item.paidAt,
@@ -212,7 +211,7 @@ function conceptTypeFromText(value: unknown): "tuition" | "enrollment" | "reenro
 function validCoveredMonth(value: unknown) {
   const text = cleanText(value, 7);
   if (!text) return null;
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) throw new ApiError(400, "El mes de colegiatura debe tener formato AAAA-MM.");
+  if (!/^\d{4}-\d{2}$/.test(text)) throw new ApiError(400, "El mes de colegiatura debe tener formato AAAA-MM.");
   return text;
 }
 
@@ -322,6 +321,7 @@ function fullAccount(studentId: number, throughMonth?: string) {
     const lastDay = `${throughMonth}-31`;
     billing.payments = billing.payments.filter((payment) => payment.paid_at <= lastDay);
     billing.summary.paidAmount = Number(billing.payments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2));
+    billing.summary.paidInstallments = billing.payments.filter((payment) => payment.concept_type === "tuition").length;
   }
   return {
     student: account,
@@ -376,10 +376,6 @@ function normalizedPaymentBody(body: any) {
       registrationPeriodNumber = number;
     } else registrationPeriodNumber = registrationPeriodFromConcept(concept) ?? (conceptType === "enrollment" ? 1 : null);
   }
-  const coveredMonth = conceptType === "tuition" ? validCoveredMonth(body.coveredMonth) : null;
-  const coveredThroughMonth = conceptType === "tuition" ? validCoveredMonth(body.coveredThroughMonth) : null;
-  if (coveredThroughMonth && (!coveredMonth || coveredThroughMonth < coveredMonth)) throw new ApiError(400, "El último mes cubierto debe ser igual o posterior al primero.");
-  if (coveredMonth && coveredThroughMonth && monthDistance(coveredMonth, coveredThroughMonth) > 119) throw new ApiError(400, "Selecciona como máximo 120 meses de cobertura por recibo.");
   return {
     folio,
     amount,
@@ -387,53 +383,42 @@ function normalizedPaymentBody(body: any) {
     paymentMethod: optionalText(body.paymentMethod, 80),
     concept,
     conceptType,
-    coveredMonth,
-    coveredThroughMonth,
+    coveredMonth: conceptType === "tuition" ? validCoveredMonth(body.coveredMonth) : null,
     registrationPeriodNumber,
     notes: normalizePhysicalFolio(body.notes)
   };
 }
 
-function monthDistance(first: string, last: string) {
-  return (Number(last.slice(0,4))-Number(first.slice(0,4)))*12 + Number(last.slice(5))-Number(first.slice(5));
-}
 function syncTuitionChargePayment(args: {
   studentId: number;
   enrollmentId: number | null;
   paymentId: number;
   amount: number;
   coveredMonth: string | null;
-  coveredThroughMonth?: string | null;
   paidAt: string;
   notes: string | null;
   userId: number;
 }) {
   if (!args.coveredMonth) return;
-  const count = args.coveredThroughMonth ? monthDistance(args.coveredMonth,args.coveredThroughMonth)+1 : 1;
-  if (Math.round(args.amount*100) < count) throw new ApiError(400, "El importe no alcanza para distribuir al menos un centavo por mes cubierto.");
-  for (let index=0;index<count;index++) {
-    const month = addBillingMonths(args.coveredMonth,index);
-    const dueDate = `${month}-10`;
-    const cents = Math.round(args.amount*100), allocated = (Math.floor(cents/count)+(index<cents%count?1:0))/100;
-    run(
-      `INSERT INTO student_tuition_charges(student_id, enrollment_id, billing_month, due_date, amount, status,
-       payment_id, notes, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?)
-       ON CONFLICT(student_id, billing_month) DO UPDATE SET enrollment_id = excluded.enrollment_id,
-       due_date = COALESCE(student_tuition_charges.due_date, excluded.due_date), amount = excluded.amount,
-       status = 'paid', payment_id = excluded.payment_id, notes = excluded.notes, updated_by = excluded.updated_by,
-       updated_at = CURRENT_TIMESTAMP`,
-      args.studentId,
-      args.enrollmentId,
-      month,
-      dueDate,
-      allocated,
-      args.paymentId,
-      args.notes,
-      args.userId,
-      args.userId
-    );
-  }
+  const dueDate = `${args.coveredMonth}-10`;
+  run(
+    `INSERT INTO student_tuition_charges(student_id, enrollment_id, billing_month, due_date, amount, status,
+     payment_id, notes, created_by, updated_by)
+     VALUES (?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?)
+     ON CONFLICT(student_id, billing_month) DO UPDATE SET enrollment_id = excluded.enrollment_id,
+     due_date = COALESCE(student_tuition_charges.due_date, excluded.due_date), amount = excluded.amount,
+     status = 'paid', payment_id = excluded.payment_id, notes = excluded.notes, updated_by = excluded.updated_by,
+     updated_at = CURRENT_TIMESTAMP`,
+    args.studentId,
+    args.enrollmentId,
+    args.coveredMonth,
+    dueDate,
+    args.amount,
+    args.paymentId,
+    args.notes,
+    args.userId,
+    args.userId
+  );
 }
 
 function unlinkTuitionChargePayment(paymentId: number) {
@@ -457,16 +442,12 @@ function deletePaymentRecord(id: number, req: AuthenticatedRequest) {
     run("DELETE FROM student_registration_status WHERE payment_id = ?", id);
     run("DELETE FROM student_payments WHERE id = ?", id);
     for (const charge of charges) {
-      const remaining = get<{id:number;enrollment_id:number|null;amount:number;paid_at:string;notes:string|null;covered_month:string;covered_through_month:string|null}>(
-        `SELECT id,enrollment_id,amount,paid_at,notes,covered_month,covered_through_month FROM student_payments
-         WHERE student_id = ? AND covered_month <= ? AND COALESCE(covered_through_month,covered_month) >= ?
-           AND concept_type = 'tuition' AND payment_kind = 'receipt'
-         ORDER BY paid_at DESC,id DESC LIMIT 1`, charge.student_id, charge.billing_month, charge.billing_month);
-      const totalMonths = remaining ? monthDistance(remaining.covered_month,remaining.covered_through_month||remaining.covered_month)+1 : 1;
-      const cents = Math.round((remaining?.amount||0)*100);
-      const allocated = (Math.floor(cents/totalMonths)+(remaining&&monthDistance(remaining.covered_month,charge.billing_month)<cents%totalMonths?1:0))/100;
+      const remaining = get<{id:number;enrollment_id:number|null;amount:number;paid_at:string;notes:string|null}>(
+        `SELECT id,enrollment_id,amount,paid_at,notes FROM student_payments
+         WHERE student_id = ? AND covered_month = ? AND concept_type = 'tuition'
+         ORDER BY paid_at DESC,id DESC LIMIT 1`, charge.student_id, charge.billing_month);
       if (remaining) syncTuitionChargePayment({ studentId: charge.student_id, enrollmentId: remaining.enrollment_id,
-        paymentId: remaining.id, amount: allocated, coveredMonth: charge.billing_month,
+        paymentId: remaining.id, amount: remaining.amount, coveredMonth: charge.billing_month,
         paidAt: remaining.paid_at, notes: remaining.notes, userId: req.user!.id });
       else run("UPDATE student_tuition_charges SET notes = NULL,updated_by = ? WHERE student_id = ? AND billing_month = ?",
         req.user!.id, charge.student_id, charge.billing_month);
@@ -478,7 +459,7 @@ function deletePaymentRecord(id: number, req: AuthenticatedRequest) {
 
 function reportRows(month: string, groupId?: number) {
   const params: Array<string | number> = [month];
-  const clauses = ["sp.payment_kind = 'receipt'", "substr(sp.paid_at, 1, 7) = ?"];
+  const clauses = ["substr(sp.paid_at, 1, 7) = ?"];
   if (groupId) {
     clauses.push("e.group_id = ?");
     params.push(groupId);
@@ -504,9 +485,9 @@ type RegisteredPhysicalFolio = {
   id: number; physical_folio: string; paid_at: string; concept: string;
   amount: number; payment_method: string | null; internal_folio: string | null;
   student_id: number; student_number: string; student_name: string;
-  group_name: string | null; source: string; covered_months?: string;
+  group_name: string | null; source: string;
 };
-function registeredPhysicalFolios(from?:unknown) {
+function registeredPhysicalFolios() {
   // Listado consolidado: los registros manuales con pago asociado ya están en student_payments.
   const recorded = all<RegisteredPhysicalFolio>(`
     SELECT sp.id,sp.notes AS physical_folio,sp.paid_at,sp.concept,sp.amount,sp.payment_method,
@@ -517,7 +498,7 @@ function registeredPhysicalFolios(from?:unknown) {
     JOIN students st ON st.id=sp.student_id
     LEFT JOIN enrollments e ON e.id=sp.enrollment_id
     LEFT JOIN groups g ON g.id=e.group_id
-    WHERE sp.payment_kind='receipt' AND sp.notes IS NOT NULL AND TRIM(sp.notes)<>''
+    WHERE sp.notes IS NOT NULL AND TRIM(sp.notes)<>''
     UNION ALL
     SELECT -srs.id AS id,srs.physical_folio,srs.paid_at,
       CASE WHEN srs.period_number=1 THEN 'Inscripción manual'
@@ -533,25 +514,19 @@ function registeredPhysicalFolios(from?:unknown) {
     WHERE srs.status='paid' AND srs.payment_id IS NULL
       AND srs.physical_folio IS NOT NULL AND TRIM(srs.physical_folio)<>''
   `);
-  const first = from ? normalizePhysicalFolio(from) : null;
   return recorded.filter(row => /^\d+$/.test(String(row.physical_folio ?? "")) && /[1-9]/.test(row.physical_folio))
-    .map(row => ({...row,physical_folio:normalizePhysicalFolio(row.physical_folio),covered_months:row.source==="payment"?all<{billing_month:string}>(
-      "SELECT billing_month FROM student_tuition_charges WHERE payment_id=? ORDER BY billing_month",row.id).map(item=>item.billing_month).join(", "):""}))
-    .filter(row => !first || comparePhysicalFolios(row.physical_folio,first)>=0)
+    .map(row => ({...row,physical_folio:normalizePhysicalFolio(row.physical_folio)}))
     .sort((a,b)=>comparePhysicalFolios(a.physical_folio,b.physical_folio) || a.paid_at.localeCompare(b.paid_at) || a.id-b.id);
 }
-paymentsRouter.get("/folios", requirePermission("payments.view"), (req, res) => {
-  const folios = registeredPhysicalFolios(req.query.from);
-  const excludedCoverageCount=get<{total:number}>("SELECT COUNT(*) AS total FROM student_payments WHERE payment_kind='coverage'")!.total;
-  res.json({total:folios.length,folios,excludedCoverageCount});
+paymentsRouter.get("/folios", requirePermission("payments.view"), (_req, res) => {
+  const folios = registeredPhysicalFolios();
+  res.json({total:folios.length,folios});
 });
-paymentsRouter.get("/folios/export", requirePermission("payments.export"), (req, res) => {
-  const folios=registeredPhysicalFolios(req.query.from);
-  if(req.query.format==="pdf") return sendFolioReport(res,folios,req.query.from?normalizePhysicalFolio(req.query.from):null);
-  const rows=folios.map(row => ({
+paymentsRouter.get("/folios/export", requirePermission("payments.export"), (_req, res) => {
+  const rows=registeredPhysicalFolios().map(row => ({
     "Folio físico":row.physical_folio,"Fecha":row.paid_at,"Matrícula":row.student_number,
     "Alumno":row.student_name,"Grupo":row.group_name??"","Concepto":row.concept,
-    "Método":row.payment_method??"","Monto":row.amount,"Folio interno":row.internal_folio??"","Meses cubiertos":row.covered_months??""
+    "Método":row.payment_method??"","Monto":row.amount,"Folio interno":row.internal_folio??""
   }));
   const headers=Object.keys(rows[0]??{"Folio físico":"","Fecha":"","Matrícula":"","Alumno":"","Grupo":"","Concepto":"","Método":"","Monto":"","Folio interno":""});
   sendCsv(res,"folios-de-pago.csv",headers,rows.map(row=>headers.map(header=>row[header as keyof typeof row])));
@@ -688,10 +663,7 @@ paymentsRouter.post("/import/preview", requirePermission("payments.manage"), upl
     const paymentMethod = optionalText(value(source, "Metodo", "MÃ©todo", "Método", "Forma de pago"), 80);
     const concept = cleanText(value(source, "Concepto") || "Colegiatura", 120) || "Colegiatura";
     const conceptType = conceptTypeFromText(concept);
-    const monthInput = value(source, "Mes", "Mes colegiatura", "Colegiatura mes");
-    // Spreadsheet readers may format a YYYY-MM CSV cell as a first-of-month date.
-    const coveredMonth = conceptType === "tuition" ? validCoveredMonth(monthInput && !/^\d{4}-\d{2}$/.test(monthInput)
-      ? validDate(monthInput,"Mes de colegiatura").slice(0,7) : monthInput) : null;
+    const coveredMonth = conceptType === "tuition" ? validCoveredMonth(value(source, "Mes", "Mes colegiatura", "Colegiatura mes")) : null;
     const registrationPeriodInput = value(source, "Semestre inscripción", "Semestre reinscripción", "Semestre", "Periodo inscripción");
     const registrationPeriodNumber = conceptType === "enrollment" || conceptType === "reenrollment"
       ? Number(registrationPeriodInput || registrationPeriodFromConcept(concept) || (conceptType === "enrollment" ? 1 : 0)) || null
@@ -749,8 +721,6 @@ paymentsRouter.post("/import/apply", requirePermission("payments.manage"), (req:
           ignored++;
           return;
         }
-        const previousRange = get<{covered_month:string|null;covered_through_month:string|null}>("SELECT covered_month,covered_through_month FROM student_payments WHERE id=?",existingPaymentId);
-        const through = item.conceptType === "tuition" && previousRange?.covered_month === item.coveredMonth ? previousRange.covered_through_month : null;
         run(
           `UPDATE student_payments SET student_id = ?, enrollment_id = ?, plan_id = ?, folio = ?, amount = ?, paid_at = ?,
            payment_method = ?, concept = ?, concept_type = ?, covered_month = ?, registration_period_number = ?, notes = ?, updated_by = ?,
@@ -770,8 +740,6 @@ paymentsRouter.post("/import/apply", requirePermission("payments.manage"), (req:
           req.user!.id,
           existingPaymentId
         );
-        run("UPDATE student_payments SET covered_through_month=? WHERE id=?",through,existingPaymentId);
-        unlinkTuitionChargePayment(existingPaymentId);
         if (item.conceptType === "tuition") {
           syncTuitionChargePayment({
             studentId: item.studentId,
@@ -779,7 +747,6 @@ paymentsRouter.post("/import/apply", requirePermission("payments.manage"), (req:
             paymentId: existingPaymentId,
             amount: item.amount,
             coveredMonth: item.coveredMonth,
-            coveredThroughMonth: through,
             paidAt: item.paidAt,
             notes: item.notes,
             userId: req.user!.id
@@ -925,13 +892,50 @@ paymentsRouter.patch("/tuition-grid", requirePermission("tuition.manage"), (req:
         const amount = Number(cell.amount ?? account.tuitionAmount ?? 0);
         if (!Number.isFinite(amount) || amount < 0) throw new ApiError(400, "El monto de colegiatura no es valido.");
         const paid = Boolean(cell.paid);
-        const existing = get<{payment_id:number|null;payment_kind:string|null}>(
-          `SELECT tc.payment_id,sp.payment_kind FROM student_tuition_charges tc
-           LEFT JOIN student_payments sp ON sp.id=tc.payment_id
-           WHERE tc.student_id=? AND tc.billing_month=?`,studentId,month);
-        if (!paid && existing?.payment_kind === "receipt") throw new ApiError(409,
-          "Este mes está cubierto por un ingreso registrado. Corrige el recibo en Folios o Cobros; la tabla no elimina ingresos de caja.");
-        const paymentId = paid ? existing?.payment_id ?? null : null;
+        let paymentId: number | null = null;
+        if (paid) {
+          const folio = `COL-${account.student_number}-${month.replace("-", "")}`;
+          const concept = tuitionConcept(month);
+          const existing = get<{ id: number }>("SELECT id FROM student_payments WHERE folio = ?", folio);
+          if (existing) {
+            paymentId = existing.id;
+            run(
+              `UPDATE student_payments SET amount = ?, paid_at = ?, concept = ?, concept_type = 'tuition',
+               covered_month = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+              amount,
+              `${month}-10`,
+              concept,
+              month,
+              req.user!.id,
+              paymentId
+            );
+          } else {
+            const inserted = run(
+              `INSERT INTO student_payments(student_id, enrollment_id, plan_id, folio, amount, paid_at, payment_method,
+               concept, concept_type, covered_month, notes, created_by, updated_by)
+               VALUES (?, ?, ?, ?, ?, ?, 'Administrativo', ?, 'tuition', ?, ?, ?, ?)`,
+              studentId,
+              account.enrollmentId,
+              account.planId,
+              folio,
+              amount,
+              `${month}-10`,
+              concept,
+              month,
+              optionalText(cell.notes, 800),
+              req.user!.id,
+              req.user!.id
+            );
+            paymentId = Number(inserted.lastInsertRowid);
+          }
+        } else {
+          const existing = get<{ payment_id: number | null }>(
+            "SELECT payment_id FROM student_tuition_charges WHERE student_id = ? AND billing_month = ?",
+            studentId,
+            month
+          );
+          if (existing?.payment_id) run("DELETE FROM student_payments WHERE id = ?", existing.payment_id);
+        }
         run(
           `INSERT INTO student_tuition_charges(student_id, enrollment_id, billing_month, due_date, amount, status,
            payment_id, notes, created_by, updated_by)
@@ -1078,13 +1082,11 @@ paymentsRouter.post("/", requirePermission("payments.manage"), (req: Authenticat
         paymentId: Number(inserted.lastInsertRowid),
         amount: body.amount,
         coveredMonth: body.coveredMonth,
-        coveredThroughMonth: body.coveredThroughMonth,
         paidAt: body.paidAt,
         notes: body.notes,
         userId: req.user!.id
       });
     }
-    run("UPDATE student_payments SET covered_through_month=? WHERE id=?",body.coveredThroughMonth,Number(inserted.lastInsertRowid));
     return Number(inserted.lastInsertRowid);
   });
   logActivity(req, "create", "student_payments", id, { studentId, folio: body.folio, amount: body.amount });
@@ -1113,7 +1115,6 @@ paymentsRouter.patch("/:id", requirePermission("payments.manage"), (req: Authent
     req.user!.id,
     id
   );
-  run("UPDATE student_payments SET covered_through_month=? WHERE id=?",body.coveredThroughMonth,id);
   unlinkTuitionChargePayment(id);
   if (body.conceptType === "tuition") {
     const account = getStudentAccount(current.student_id);
@@ -1123,7 +1124,6 @@ paymentsRouter.patch("/:id", requirePermission("payments.manage"), (req: Authent
       paymentId: id,
       amount: body.amount,
       coveredMonth: body.coveredMonth,
-        coveredThroughMonth: body.coveredThroughMonth,
       paidAt: body.paidAt,
       notes: body.notes,
       userId: req.user!.id

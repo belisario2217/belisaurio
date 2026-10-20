@@ -132,7 +132,7 @@ export function TuitionGridPage() {
       </section>
 
       <section className="table-section">
-        <header className="section-heading"><div><span>Colegiaturas</span><h2>Control semestral por alumno</h2><p className="workspace-help">Esta tabla registra meses cubiertos y no genera ingresos de caja. Registra cada recibo una sola vez en Cobros, con su fecha real y los meses que ampara. Seleccionar varios meses aquí no crea pagos nuevos.</p></div></header>
+        <header className="section-heading"><div><span>Colegiaturas</span><h2>Control semestral por alumno</h2></div></header>
         <div className="table-wrap">
           <table>
             <thead>

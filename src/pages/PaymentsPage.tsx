@@ -26,7 +26,6 @@ type Payment = {
   concept: string;
   concept_type?: "tuition" | "enrollment" | "reenrollment" | "other";
   covered_month?: string | null;
-  covered_through_month?: string | null;
   registration_period_number?: number | null;
   notes: string | null;
 };
@@ -90,7 +89,6 @@ const emptyForm = {
   paymentMethod: "Transferencia",
   concept: "Colegiatura",
   coveredMonth: month,
-  coveredThroughMonth: "",
   registrationPeriodNumber: "",
   notes: ""
 };
@@ -172,7 +170,6 @@ export function PaymentsPage() {
       paymentMethod: payment.payment_method ?? "",
       concept: payment.concept,
       coveredMonth: payment.covered_month ?? month,
-      coveredThroughMonth: payment.covered_through_month ?? "",
       registrationPeriodNumber: payment.registration_period_number == null ? "" : String(payment.registration_period_number),
       notes: payment.notes ?? ""
     });
@@ -199,7 +196,6 @@ export function PaymentsPage() {
         concept: form.concept,
         conceptType,
         coveredMonth: conceptType === "tuition" ? form.coveredMonth : null,
-        coveredThroughMonth: conceptType === "tuition" ? form.coveredThroughMonth || form.coveredMonth : null,
         registrationPeriodNumber: conceptType === "enrollment" || conceptType === "reenrollment" ? Number(form.registrationPeriodNumber || (conceptType === "enrollment" ? 1 : 0)) || null : null,
         notes: form.notes
       };
@@ -333,11 +329,10 @@ export function PaymentsPage() {
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Editar pago" : "Nuevo pago"} size="small">
         <form onSubmit={savePayment}>
           <div className="form-grid two">
-            <Field label="Fecha real de ingreso a caja" required hint="El ingreso se contabiliza solo en esta fecha, aunque cubra otros meses."><input type="date" value={form.paidAt} onChange={(event) => setForm({ ...form, paidAt: event.target.value })} required /></Field>
+            <Field label="Fecha" required><input type="date" value={form.paidAt} onChange={(event) => setForm({ ...form, paidAt: event.target.value })} required /></Field>
             <Field label="Monto" required><input type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required /></Field>
             <Field label="Metodo"><input value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value })} /></Field>
-            <Field label="Primer mes que cubre"><input type="month" value={form.coveredMonth} onChange={(event) => setForm({ ...form, coveredMonth: event.target.value || month })} /></Field>
-            <Field label="Último mes que cubre" hint="Opcional. Un solo recibo puede cubrir varios meses; captura el importe total recibido."><input type="month" min={form.coveredMonth} value={form.coveredThroughMonth} onChange={(event) => setForm({ ...form, coveredThroughMonth: event.target.value })} /></Field>
+            <Field label="Mes colegiatura"><input type="month" value={form.coveredMonth} onChange={(event) => setForm({ ...form, coveredMonth: event.target.value || month })} /></Field>
             {(form.concept.toLowerCase().includes("inscrip")) && <Field label="Semestre que ampara" required><select value={form.registrationPeriodNumber} onChange={(event) => setForm({ ...form, registrationPeriodNumber: event.target.value })} required><option value="">Seleccionar</option>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}° semestre</option>)}</select></Field>}
           </div>
           <Field label="Concepto" required><input value={form.concept} onChange={(event) => setForm({ ...form, concept: event.target.value })} required /></Field>
