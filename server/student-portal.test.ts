@@ -65,6 +65,35 @@ async function pdfText(buffer: Buffer) {
 }
 
 describe("Student portal coursework and report", () => {
+  it("exposes recorded grades by semester even when completed coursework has no active teaching assignment", async () => {
+    const f = fixture();
+    const direct = f.addSubject("Calificación curricular directa", 3, "completed", f.oldCycle, 9);
+    const completed = f.addSubject("Materia finalizada del ciclo activo", 3, "completed", f.cycle, 10);
+    run("UPDATE student_subjects SET status='completed',final_score=10 WHERE student_id=? AND subject_id=?", f.student, f.future);
+    const response = await request(app).get(`/api/portal?studentId=${fixture().student}`).set("Authorization", f.auth).expect(200);
+    const rows = response.body.gradeSubjects;
+    expect(rows.find((s:any) => s.subject_id === direct)).toMatchObject({recommended_period:3,final_score:9});
+    expect(response.body.subjects.find((s:any) => s.subject_id === completed)).toMatchObject({recommended_period:3,final_score:10});
+    expect(rows.find((s:any) => s.subject_id === f.past)).toMatchObject({recommended_period:1,final_score:8});
+    expect(rows.find((s:any) => s.subject_id === f.current)).toMatchObject({recommended_period:3,status:"in_progress"});
+    for (const id of [f.future, f.unloaded, f.pending, f.old]) expect(rows.some((s:any) => s.subject_id === id)).toBe(false);
+    expect(rows.every((s:any) => s.recommended_period <= 3)).toBe(true);
+  });
+  it("retrieves historical captures after a group change without exposing other students' grades", async () => {
+    const f = fixture();
+    const subject = f.addSubject("Materia histórica capturada", 2, null);
+    run("UPDATE enrollments SET cycle_id=? WHERE id=?", f.cycle, f.enrollment);
+    const oldGroup = Number(run("INSERT INTO groups(name,program_id,shift_id,cycle_id,plan_id) SELECT 'Grupo anterior prueba',program_id,shift_id,cycle_id,plan_id FROM groups WHERE id=?", f.group).lastInsertRowid);
+    const oldEnrollment = Number(run("INSERT INTO enrollments(student_id,program_id,shift_id,group_id,cycle_id,plan_id,is_active) SELECT student_id,program_id,shift_id,?,?,plan_id,0 FROM enrollments WHERE id=?", oldGroup, f.oldCycle, f.enrollment).lastInsertRowid);
+    const period = Number(run("INSERT INTO academic_periods(cycle_id,name,sequence,start_date,end_date) VALUES(?,'Final anterior',1,'2025-08-10','2026-01-23')", f.oldCycle).lastInsertRowid);
+    const assignment = Number(run("INSERT INTO subject_assignments(subject_id,group_id,teacher_id,period_id,grading_scale_id,evaluation_mode,is_active) SELECT ?,?,teacher_id,?,grading_scale_id,'final',0 FROM subject_assignments WHERE id=?", subject, oldGroup, period, f.assignment).lastInsertRowid);
+    run("INSERT INTO grades(enrollment_id,assignment_id,final_score,status) VALUES(?,?,7,'passed')", oldEnrollment, assignment);
+    const response = await request(app).get("/api/portal").set("Authorization",f.auth).expect(200);
+    expect(response.body.gradeSubjects.find((s:any) => s.subject_id === subject)).toMatchObject({recommended_period:2,final_score:7});
+    const other = fixture();
+    const otherResponse = await request(app).get("/api/portal").set("Authorization",other.auth).expect(200);
+    expect(otherResponse.body.gradeSubjects.some((s:any) => s.subject_id === subject)).toBe(false);
+  });
   it("shows only loaded current-semester subjects in the active cycle and respects administrative pending status", async () => {
     const f = fixture();
     const response = await request(app).get("/api/portal").set("Authorization",f.auth).expect(200);
@@ -84,6 +113,7 @@ describe("Student portal coursework and report", () => {
     run("UPDATE student_subjects SET status='completed',final_score=9 WHERE student_id=? AND subject_id=?",f.student,f.current);
     const data = activeStudentPortalData(f.student);
     expect(data.subjects[0]).toMatchObject({partial_1:9,partial_2:null,partial_3:null,final_score:null,status:"in_progress"});
+    expect(data.gradeSubjects.find(s=>s.subject_id===f.current)).toMatchObject({partial_1:9,partial_2:null,partial_3:null,final_score:null,status:"in_progress"});
     expect(data.progress).toMatchObject({average:8,completedSubjects:1});
     expect(getAcademicRecord(f.student,"report_card").subjects.find(s=>s.subject_id===f.current)).toMatchObject({final_score:null,status:"in_progress"});
   });

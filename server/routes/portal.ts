@@ -73,6 +73,7 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
   const comments = [...new Set(rows.map((grade) => grade.comments).filter(Boolean))].join(" | ") || null;
   return {
     ...subject,
+    course_cycle_name: subject.course_cycle_name ?? latest?.grade_cycle_name ?? null,
     assignment_id: latest?.assignment_id ?? null,
     evaluation_mode: latest?.evaluation_mode ?? null,
     teacher_name: latest?.teacher_name ?? null,
@@ -89,7 +90,7 @@ export function studentPortalData(studentId: number) {
   syncAcademicSubjectStatuses();
 
   const enrollment = get<any>(
-    `SELECT e.id AS enrollment_id, COALESCE(e.plan_id,g.plan_id) AS plan_id, e.group_id, e.enrolled_at,
+    `SELECT e.id AS enrollment_id, e.program_id, COALESCE(e.plan_id,g.plan_id) AS plan_id, e.group_id, e.enrolled_at,
      COALESCE(e.tuition_start_date, ec.start_date) AS billing_start_date, e.tuition_due_day,
      p.duration_periods, pl.tuition_amount, st.id AS student_id, st.student_number,
      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS student_name,
@@ -115,7 +116,7 @@ export function studentPortalData(studentId: number) {
 
   const gradeRows = all<any>(
     `SELECT s.id AS subject_id, s.code, s.name, COALESCE(NULLIF(s.credits, 0), 1) AS subject_credits,
-     a.id AS assignment_id, a.evaluation_mode, ap.sequence AS period_sequence, ap.cycle_id,
+     a.id AS assignment_id, a.group_id AS assignment_group_id, a.evaluation_mode, ap.sequence AS period_sequence, ap.cycle_id, sc.name AS grade_cycle_name,
      t.full_name AS teacher_name, gr.partial_1, gr.partial_2, gr.partial_3,
      gr.final_score, gr.status, gr.comments, gs.passing_score
      FROM subject_assignments a
@@ -124,11 +125,15 @@ export function studentPortalData(studentId: number) {
      JOIN school_cycles sc ON sc.id = ap.cycle_id
      JOIN grading_scales gs ON gs.id = a.grading_scale_id
      LEFT JOIN teachers t ON t.id = a.teacher_id
-     LEFT JOIN grades gr ON gr.assignment_id = a.id AND gr.enrollment_id = ?
-     WHERE a.group_id = ? AND a.is_active = 1 AND s.is_active = 1
+     LEFT JOIN grades gr ON gr.assignment_id = a.id AND gr.enrollment_id IN (
+       SELECT id FROM enrollments WHERE student_id = ? AND program_id = ?
+         AND (plan_id = ? OR plan_id IS NULL)
+     )
+     WHERE (a.group_id = ? AND a.is_active = 1 OR gr.id IS NOT NULL) AND s.is_active = 1
+       AND sc.start_date <= (SELECT start_date FROM school_cycles WHERE id = ?)
      ORDER BY s.name, sc.start_date, ap.sequence, a.id`,
-    enrollment.enrollment_id,
-    enrollment.group_id
+    enrollment.student_id, enrollment.program_id, enrollment.plan_id,
+    enrollment.group_id, enrollment.active_cycle_id
   );
   const explicitSubjects = all<any>(
     `SELECT ss.id AS student_subject_id, NULL AS plan_subject_id, ss.subject_id, s.code, s.name,
@@ -139,9 +144,11 @@ export function studentPortalData(studentId: number) {
      JOIN subjects s ON s.id = ss.subject_id
      LEFT JOIN school_cycles sc ON sc.id = ss.school_cycle_id
      WHERE ss.student_id = ? AND s.is_active = 1
-       AND (ss.plan_id = ? OR ss.plan_id IS NULL)
+       AND (ss.plan_id = ? OR (ss.plan_id IS NULL AND (ss.enrollment_id IS NULL
+         OR ss.enrollment_id IN (SELECT id FROM enrollments WHERE student_id = ? AND program_id = ?))))
+       AND (sc.start_date IS NULL OR sc.start_date <= (SELECT start_date FROM school_cycles WHERE id = ?))
      ORDER BY ss.semester_number, s.name, ss.id`,
-    enrollment.student_id, enrollment.plan_id
+    enrollment.student_id, enrollment.plan_id, enrollment.student_id, enrollment.program_id, enrollment.active_cycle_id
   );
   const planSubjects = enrollment.plan_id ? all<any>(
     `SELECT ps.id AS plan_subject_id, s.id AS subject_id, s.code, s.name,
@@ -155,7 +162,7 @@ export function studentPortalData(studentId: number) {
     enrollment.plan_id,
     enrollment.student_id
   ) : [];
-  const baseSubjects = planSubjects.length ? planSubjects : gradeRows.filter((grade) => !explicitSubjects.some((subject) => subject.subject_id === grade.subject_id)).map((grade) => ({
+  const baseSubjects = planSubjects.length ? planSubjects : gradeRows.filter((grade) => grade.cycle_id === enrollment.active_cycle_id && grade.assignment_group_id === enrollment.group_id && !explicitSubjects.some((subject) => subject.subject_id === grade.subject_id)).map((grade) => ({
     plan_subject_id: null,
     subject_id: grade.subject_id,
     code: grade.code,
@@ -168,7 +175,7 @@ export function studentPortalData(studentId: number) {
     course_cycle_name: null, school_cycle_id: grade.cycle_id
   })).filter((subject, index, list) => list.findIndex((item) => item.subject_id === subject.subject_id) === index);
   const gradeOnlySubjects = gradeRows
-    .filter((grade) => !baseSubjects.some((subject) => subject.subject_id === grade.subject_id) && !explicitSubjects.some((subject) => subject.subject_id === grade.subject_id))
+    .filter((grade) => grade.cycle_id === enrollment.active_cycle_id && grade.assignment_group_id === enrollment.group_id && !baseSubjects.some((subject) => subject.subject_id === grade.subject_id) && !explicitSubjects.some((subject) => subject.subject_id === grade.subject_id))
     .map((grade) => ({
       plan_subject_id: null,
       subject_id: grade.subject_id,
@@ -227,6 +234,34 @@ export function studentPortalData(studentId: number) {
     ? graded.reduce((sum, subject) => sum + Number(subject.final_score), 0) / graded.length
     : null;
 
+  const activeSubjects = [...new Map(subjects.filter(subject => {
+      if (subject.recommended_period !== enrollment.current_period_number) return false;
+      if (subject.enrollment_id != null && subject.enrollment_id !== enrollment.enrollment_id) return false;
+      const assigned = gradeRows.some(row => row.subject_id === subject.subject_id && row.cycle_id === enrollment.active_cycle_id);
+      if (subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id) return assigned;
+      const captured = [subject.partial_1, subject.partial_2, subject.partial_3, subject.final_score].some(score => score != null);
+      if (subject.explicit_status === "pending" && !captured) return false;
+      return subject.explicit_status === "in_progress" || subject.explicit_status === "completed" || captured || assigned;
+    }).map(subject => {
+      // Old captures used the enrollment's formation cycle. An assignment in the
+      // active cycle establishes a new attempt; its previous final never leaks in.
+      const base = subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id
+        ? { ...subject, school_cycle_id: enrollment.active_cycle_id, explicit_score: null, explicit_status: null }
+        : subject;
+      const active = summarizeSubject(base, gradeRows.filter(row => row.cycle_id === enrollment.active_cycle_id));
+      return [subject.subject_id, { ...active, course_cycle_name: enrollment.cycle_name,
+        status: active.status === "pending" ? "in_progress" as const : active.status }] as const;
+    })).values()];
+  // The transcript includes loaded coursework from every semester reached.
+  // Current-cycle attempts take precedence over stale curricular snapshots.
+  const gradeSubjects = [...new Map([
+    ...subjects.filter(subject => subject.recommended_period <= enrollment.current_period_number
+      && (subject.explicit_status === "completed" || subject.final_score != null
+        || subject.partial_1 != null || subject.partial_2 != null || subject.partial_3 != null)),
+    ...activeSubjects
+  ].map(subject => [`${subject.recommended_period}:${subject.subject_id}`, subject])).values()]
+    .sort((a, b) => a.recommended_period - b.recommended_period || a.name.localeCompare(b.name, "es-MX"));
+
   return {
     student: enrollment,
     progress: {
@@ -253,23 +288,8 @@ export function studentPortalData(studentId: number) {
     attendance,
     messages,
     subjects,
-    activeSubjects: [...new Map(subjects.filter(subject => {
-      if (subject.recommended_period !== enrollment.current_period_number) return false;
-      if (subject.enrollment_id != null && subject.enrollment_id !== enrollment.enrollment_id) return false;
-      const assigned = gradeRows.some(row => row.subject_id === subject.subject_id && row.cycle_id === enrollment.active_cycle_id);
-      if (subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id) return assigned;
-      if (subject.explicit_status === "pending") return false;
-      return subject.explicit_status === "in_progress" || assigned;
-    }).map(subject => {
-      // Old captures used the enrollment's formation cycle. An assignment in the
-      // active cycle establishes a new attempt; its previous final never leaks in.
-      const base = subject.school_cycle_id != null && subject.school_cycle_id !== enrollment.active_cycle_id
-        ? { ...subject, school_cycle_id: enrollment.active_cycle_id, explicit_score: null, explicit_status: null }
-        : subject;
-      const active = summarizeSubject(base, gradeRows.filter(row => row.cycle_id === enrollment.active_cycle_id));
-      return [subject.subject_id, { ...active, course_cycle_name: enrollment.cycle_name,
-        status: active.status === "pending" ? "in_progress" as const : active.status }] as const;
-    })).values()]
+    activeSubjects,
+    gradeSubjects
   };
 }
 export function activeStudentPortalData(studentId: number) {
