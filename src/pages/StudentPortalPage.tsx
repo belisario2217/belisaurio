@@ -60,6 +60,7 @@ type PortalData = {
     attended_days: number;
     percentage: number;
   }>;
+  gradeSubjects: PortalData["subjects"];
   subjects: Array<{
     plan_subject_id: number | null;
     subject_id: number;
@@ -88,6 +89,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
@@ -97,7 +99,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
     const controller = new AbortController();
     setError("");
     api<PortalData>("/portal", { signal: controller.signal })
-      .then(setData)
+      .then((result) => { setData(result); setSelectedSemester(result.student.current_period_number); })
       .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "No fue posible cargar tu información."); });
     return () => controller.abort();
   }, [view]);
@@ -132,7 +134,10 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
   if (error) return <EmptyState icon={<GraduationCap size={27} />} title="Tu expediente no esta disponible" text={error} />;
   if (!data) return <div className="loading-panel">Cargando avance curricular...</div>;
 
-  const { student, progress, subjects, billing, attendance, registration } = data;
+  const { student, progress, billing, attendance, registration } = data;
+  const semesters = [...new Set([student.current_period_number, ...data.gradeSubjects.map(subject => subject.recommended_period)]
+    .filter((semester): semester is number => semester != null))].sort((a, b) => a - b);
+  const subjects = data.gradeSubjects.filter(subject => subject.recommended_period === selectedSemester);
 
   return (
     <div className="student-portal page-stack">
@@ -181,7 +186,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
       </section>
 
       <div className="portal-section-links">
-        <Link to="/mis-calificaciones"><BookOpenCheck size={22} /><strong>Mis calificaciones</strong><span>Materias activas y boleta del alumno</span><ArrowRight size={18} /></Link>
+        <Link to="/mis-calificaciones"><BookOpenCheck size={22} /><strong>Mis calificaciones</strong><span>Calificaciones por semestre y boleta del alumno</span><ArrowRight size={18} /></Link>
         <Link to="/mis-pagos"><ReceiptText size={22} /><strong>Mis pagos</strong><span>Colegiaturas e historial de pagos</span><ArrowRight size={18} /></Link>
         <Link to="/mi-asistencia"><CalendarCheck size={22} /><strong>Mi asistencia</strong><span>Consulta tus días de clase</span><ArrowRight size={18} /></Link>
       </div>
@@ -232,9 +237,16 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
 
       {view === "grades" && <section className="portal-subjects">
         <header className="section-heading">
-          <div><span>Mi carga académica activa</span><h2>Mis calificaciones</h2><p className="table-sub">Los parciales capturados se muestran por separado. La calificación final estará disponible al completar la evaluación.</p></div>
+          <div><span>Mi historial por semestre</span><h2>Mis calificaciones</h2><p className="table-sub">Los parciales capturados se muestran por separado. La calificación final estará disponible al completar la evaluación.</p></div>
           <Button icon={<Download size={17} />} busy={downloading} onClick={downloadReport}>Descargar boleta del alumno</Button>
         </header>
+        <div className="form-grid" style={{ padding: "16px 20px" }}>
+          <Field label="Semestre a consultar">
+            <select value={selectedSemester ?? ""} onChange={(event) => setSelectedSemester(Number(event.target.value))}>
+              {semesters.map(semester => <option key={semester} value={semester}>{semester}° semestre{semester === student.current_period_number ? " (actual)" : ""}</option>)}
+            </select>
+          </Field>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -257,8 +269,8 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
             </tbody>
           </table>
         </div>
-        {!subjects.length && <EmptyState icon={<Clock3 size={25} />} title="Sin materias activas" text="Control Escolar aún no ha cargado materias activas para tu semestre y ciclo escolar actual." />}
-      <p className="table-sub">La boleta del alumno es informativa y no tiene valor para trámites. Incluye QR para cotejar sus datos.</p>
+        {!subjects.length && <EmptyState icon={<Clock3 size={25} />} title="Sin materias registradas en este semestre" text="Selecciona otro semestre para consultar tus calificaciones. Las materias pendientes de cursar no se muestran." />}
+      <p className="table-sub">La descarga corresponde al semestre actual. La boleta del alumno es informativa y no tiene valor para trámites. Incluye QR para cotejar sus datos.</p>
       </section>}
 
       <Modal open={passwordOpen} onClose={() => setPasswordOpen(false)} title="Cambiar contraseña" size="small">
