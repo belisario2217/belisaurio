@@ -1,7 +1,7 @@
 import type { Response } from "express";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import { documentBranding, pdfLetterhead, workbookLetterhead } from "./document-branding.js";
 
 export type TabularRow = Record<string, unknown>;
@@ -20,11 +20,19 @@ export function parseWorkbook(buffer: Buffer): TabularRow[] {
 }
 
 export async function sendWorkbook(res: Response, filename: string, sheetName: string, rows: TabularRow[]) {
+  const {default: ExcelJS} = await import("exceljs");
   const brand=documentBranding(),workbook=new ExcelJS.Workbook();
   workbook.creator=brand.name;workbook.company=brand.name;workbook.created=new Date();
   const sheet=workbook.addWorksheet(sheetName.slice(0,31),{views:[{state:"frozen",ySplit:7,showGridLines:false}]});
   const headers=Object.keys(rows[0]??{}),last=Math.max(4,headers.length);
-  for(let i=1;i<=last;i++)sheet.getColumn(i).width=Math.min(42,Math.max(i===1?16:22,(headers[i-1]??"").length+2,...rows.map(row=>String(row[headers[i-1]]??"").length+2)));
+  for (let i=1;i<=last;i++) {
+    let width=Math.max(i===1?16:22,(headers[i-1]??"").length+2);
+    for (const row of rows) {
+      if (width>=42) break;
+      width=Math.max(width,String(row[headers[i-1]]??"").length+2);
+    }
+    sheet.getColumn(i).width=Math.min(42,width);
+  }
   workbookLetterhead(workbook,sheet,filename.replace(/\.xlsx$/i,"").replace(/[-_]/g," "),last);
   sheet.getRow(7).values=headers.length?headers:["Sin registros"];
   sheet.getRow(7).eachCell(cell=>{cell.font={name:"Arial",bold:true,size:10,color:{argb:"FFFFFFFF"}};cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF172951"}};cell.alignment={wrapText:true,vertical:"middle"};});sheet.getRow(7).height=30;

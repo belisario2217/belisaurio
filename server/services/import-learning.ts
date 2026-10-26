@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Worker } from "node:worker_threads";
+import { readPdfPages } from "./pdf-reader.js";
 import * as XLSX from "xlsx";
 import { all, get, run } from "../db.js";
 import { ApiError } from "../utils.js";
@@ -66,14 +66,7 @@ export async function readLearningFile(buffer:Buffer,filename:string,kind:Kind,u
     if(!raw.length)raw=[{name:"Texto del documento",matrix:text(root).split(/\n/).filter(Boolean).map(line=>[line])}];
   }else if(extension==="pdf"){
     if(buffer.subarray(0,5).toString()!=="%PDF-")throw new ApiError(400,"El archivo no contiene un PDF válido.");
-    const worker=new Worker(new URL("./pdf-reader-worker.mjs",import.meta.url),{workerData:buffer,execArgv:[],resourceLimits:{maxOldGenerationSizeMb:128,maxYoungGenerationSizeMb:32}});
-    let timer:ReturnType<typeof setTimeout>|undefined;
-    try{raw=await new Promise((resolve,reject)=>{
-      timer=setTimeout(()=>reject(new ApiError(408,"El PDF tardó demasiado en leerse. Divide el documento o usa una hoja de cálculo.")),15000);
-      worker.once("message",result=>result.error?reject(new ApiError(400,result.error)):resolve(result.pages));
-      worker.once("error",()=>reject(new ApiError(400,"El PDF excede los límites de lectura o no es válido.")));
-      worker.once("exit",code=>{if(code!==0)reject(new ApiError(400,"No se pudo terminar la lectura del PDF."));});
-    });}finally{if(timer)clearTimeout(timer);await worker.terminate();}
+    raw=await readPdfPages(buffer);
   }else throw new ApiError(400,"Usa Excel, CSV, Word (.docx) o PDF con texto seleccionable.");
   if(raw.length>40)throw new ApiError(400,"Divide el documento en menos tablas o páginas.");
   const tables=raw.map(t=>table(t.name,t.matrix,kind,userId)).filter(Boolean);

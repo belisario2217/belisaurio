@@ -1,7 +1,7 @@
 import path from "node:path";
 import { displayPhysicalFolio } from "./physical-folio.js";
 import type { Response } from "express";
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import { createPdf } from "./files.js";
 import { pdfInstitutionalVectors, workbookInstitutionLogo } from "./document-branding.js";
 import { institutionLogoFile } from "./institution-logo.js";
@@ -689,6 +689,7 @@ export async function sendAccountStatementWorkbook(
 ) {
   const issued = localIssuedParts(new Date(official.issuedAt));
   const code = `EC-${official.fingerprint.toUpperCase()}`;
+  const {default: ExcelJS} = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = settings.institution_name || "Control Escolar";
   workbook.company = settings.institution_name || "Instituto de Formación Profesional S.C.";
