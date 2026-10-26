@@ -70,17 +70,12 @@ function money(value: number) {
   return Number(value.toFixed(2));
 }
 
-function currentMonth() {
-  return currentDate().slice(0, 7);
-}
+const billingDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit"
+});
 
 function currentDate() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Mexico_City",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
+  const parts = billingDateFormatter.formatToParts(new Date());
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
@@ -131,7 +126,7 @@ function fallbackSchedule(source: BillingSource) {
       billing_month: monthFromDate(due) ?? "",
       due_date: due,
       amount: tuitionAmount,
-      status: monthFromDate(due) && monthFromDate(due)! <= currentMonth() ? "pending" : "pending",
+      status: "pending",
       payment_id: null,
       notes: null
     } satisfies TuitionChargeRecord;
@@ -172,14 +167,17 @@ export function listTuitionCharges(source: BillingSource): TuitionChargeRecord[]
 export function summarizeBilling(source: BillingSource, payments: PaymentRecord[], charges: TuitionChargeRecord[]) {
   const tuitionAmount = Math.max(0, Number(source.tuitionAmount ?? charges.find((charge) => charge.amount > 0)?.amount ?? 0));
   const totalInstallments = charges.length;
-  const accruedCharges = charges.filter((charge) => (charge.due_date ?? `${charge.billing_month}-10`) <= currentDate());
+  const today = currentDate();
+  const accruedCharges = charges.filter((charge) => (charge.due_date ?? `${charge.billing_month}-10`) <= today);
   const tuitionPayments = payments.filter((payment) => payment.concept_type === "tuition");
+  const paidMonths = new Set(tuitionPayments.map(payment => payment.covered_month));
   const paidCharges = charges.filter((charge) => charge.status === "paid" || charge.status === "waived"
-    || tuitionPayments.some((payment) => payment.covered_month === charge.billing_month));
+    || paidMonths.has(charge.billing_month));
   const paidAmount = money(payments.reduce((sum, payment) => sum + Number(payment.amount), 0));
   const tuitionPaidAmount = money(tuitionPayments.reduce((sum, payment) => sum + Number(payment.amount), 0));
   const expectedAmount = money(charges.reduce((sum, charge) => sum + Number(charge.amount), 0));
   const accruedAmount = money(accruedCharges.reduce((sum, charge) => sum + Number(charge.amount), 0));
+  const paidChargeSet = new Set(paidCharges);
   const coveredByStatus = money(paidCharges.reduce((sum, charge) => sum + Number(charge.amount), 0));
   const balance = money(Math.max(0, accruedAmount - Math.max(tuitionPaidAmount, coveredByStatus)));
   return {
@@ -194,17 +192,25 @@ export function summarizeBilling(source: BillingSource, payments: PaymentRecord[
     otherPaidAmount: money(paidAmount - tuitionPaidAmount),
     balance,
     paidInstallments: paidCharges.length,
-    pendingInstallments: accruedCharges.filter((charge) => !paidCharges.includes(charge)).length
+    pendingInstallments: accruedCharges.filter((charge) => !paidChargeSet.has(charge)).length
   } satisfies BillingSummary;
 }
 
 export function buildTuitionSchedule(charges: TuitionChargeRecord[], payments: PaymentRecord[]) {
+  const today = currentDate();
+  const byId = new Map<number, PaymentRecord>();
+  const byMonth = new Map<string, PaymentRecord>();
+  for (const payment of payments) {
+    // Preserve find() semantics: the first receipt in the existing sort order wins.
+    if (!byId.has(payment.id)) byId.set(payment.id, payment);
+    if (payment.concept_type === "tuition" && payment.covered_month != null && !byMonth.has(payment.covered_month)) {
+      byMonth.set(payment.covered_month, payment);
+    }
+  }
   return charges.map((charge, index) => {
-    const payment = charge.payment_id
-      ? payments.find((item) => item.id === charge.payment_id)
-      : payments.find((item) => item.concept_type === "tuition" && item.covered_month === charge.billing_month);
+    const payment = charge.payment_id ? byId.get(charge.payment_id) : byMonth.get(charge.billing_month);
     const paid = charge.status === "paid" || charge.status === "waived" || Boolean(payment);
-    const due = (charge.due_date ?? `${charge.billing_month}-10`) <= currentDate();
+    const due = (charge.due_date ?? `${charge.billing_month}-10`) <= today;
     const paidAmount = paid ? Number(payment?.amount ?? charge.amount) : 0;
     const pendingAmount = !paid && due
       ? Math.max(0, Number(charge.amount) - paidAmount)

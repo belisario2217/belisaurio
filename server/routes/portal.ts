@@ -86,7 +86,7 @@ function summarizeSubject(subject: any, gradeRows: any[]): PortalSubject {
 }
 
 export function studentPortalData(studentId: number) {
-  syncAcademicSubjectStatuses();
+  syncAcademicSubjectStatuses(studentId);
 
   const enrollment = get<any>(
     `SELECT e.id AS enrollment_id, e.program_id, COALESCE(e.plan_id,g.plan_id) AS plan_id, e.group_id, e.enrolled_at,
