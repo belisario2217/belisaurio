@@ -1,8 +1,8 @@
 # Portal del alumno
 
 - **Mi avance** conserva el resumen de trayectoria y los accesos a las secciones.
-- **Mis calificaciones**, **Mis pagos** y **Mi asistencia** tienen rutas y entradas propias en el menú, al igual que Mensajes importantes y Mi credencial.
-- La tabla de calificaciones y la boleta descargable comparten la misma carga activa: semestre del alumno (o de su grupo), ciclo escolar activo y materias cargadas. No se publican pendientes, materias futuras ni materias del plan sin cargar. Una materia activa puede estar todavía sin calificación.
+- **Mis calificaciones** y **Mis pagos** tienen rutas y entradas propias en el menú, al igual que Mensajes importantes y Mi credencial.
+- Mis calificaciones permite seleccionar semestres con materias registradas. La boleta descargable corresponde a la carga del semestre actual del alumno (o de su grupo) y el ciclo escolar activo. No se publican pendientes, materias futuras ni materias del plan sin cargar. Una materia activa puede estar todavía sin calificación.
 - Un parcial incompleto no aporta calificación final, aprobación, créditos obtenidos ni promedio final. Las importaciones con una nota única en una asignación de parciales se guardan en el parcial correspondiente.
 - El ciclo activo no sustituye la fecha inicial de facturación ni se utiliza como número de semestre.
 

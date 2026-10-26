@@ -64,30 +64,15 @@ historial completo de movimientos. El PDF pagina cada 10 pagos y la pestaña **E
 de Excel cada 12. Cada hoja repite encabezado, datos del alumno, totales, firma, folio y QR.
 
 Al registrar o editar un pago, captura el **NÚMERO DE FOLIO FÍSICO** impreso en el recibo,
-con al menos cuatro dígitos, desde **0001** y sin límite superior de consecutivo (por ejemplo, **1001**, **9999**, **10000**). En **Finanzas → Folios** se consultan todos los folios registrados, ordenados numéricamente de menor a mayor, y se pueden exportar en CSV. El sistema conserva por separado su identificador
-interno; los estados de cuenta muestran únicamente el folio físico.
+con al menos cuatro dígitos, desde **0001** y sin límite superior de consecutivo (por ejemplo, **1001**, **9999**, **10000**). El sistema conserva por separado su identificador
+interno; los estados de cuenta muestran únicamente el folio físico. Los cobros se
+consultan y corrigen desde **Cobros**.
 
-En **Finanzas → Folios**, el personal con permiso para administrar cobros puede
-usar **Eliminar** en el registro que necesita corregir. Revisa el alumno, importe,
-fecha y concepto y confirma **Eliminar registro**. Se elimina únicamente ese cobro
-y se actualizan el estado de cuenta, el portal del alumno, los ingresos y el balance.
-Si existe otro pago válido del mismo mes o inscripción, se conserva; si era el único,
-la colegiatura o inscripción vuelve a quedar pendiente. Los registros manuales de
-inscripción sin pago asociado también pueden eliminarse. La acción queda en bitácora.
-Los estados de cuenta emitidos anteriormente conservan su información de emisión;
-descarga uno nuevo para consultar los importes corregidos.
+## Autorización para evaluar
 
-## Asistencia y autorización para evaluar
-
-La sección **Asistencia** muestra al docente únicamente sus materias y grupos. El correo de su
-usuario debe coincidir con el correo capturado en el catálogo de docentes. Para cada mes se
-captura el total de clases impartidas y el número de asistencias de cada alumno; puede guardarse
-como borrador y posteriormente confirmarse.
-
-El alumno consulta los meses confirmados desde **Mi avance**. Para que un docente pueda capturar
-su evaluación, el alumno debe acumular al menos **80% de asistencia confirmada** en la materia y
-tener un pago identificado como **Inscripción** o **Reinscripción** dentro del periodo académico.
-El estado de reinscripción también aparece en Alumnos y Cobros.
+La captura docente requiere el pago de inscripción o reinscripción del semestre.
+No se solicita asistencia. Las funciones Asistencia y Folios fueron retiradas;
+los pagos y los datos históricos se conservan.
 
 ## Promoción al semestre siguiente
 
@@ -139,7 +124,6 @@ fechas del ciclo, el dominio público y la revocación de emisiones.
 Los formatos operativos incluyen:
 
 - Lista de alumnos
-- Lista de asistencia
 - Concentrado de calificaciones
 - Reporte por materia
 - Reporte por docente
@@ -180,6 +164,6 @@ En **Alumnos**, pulsa el nombre para abrir el expediente y consultar su avance. 
 
 ## Membrete en PDF y Excel
 
-Los documentos generados utilizan el logo y el nombre de la escuela configurados en **Configuración**, con Campus Frontera y los datos de contacto disponibles. Los reportes PDF repiten el membrete en cada página; las hojas Excel incluyen logo, encabezado institucional, fecha de emisión y encabezados de impresión. Las constancias, listas de asistencia, boletas y estados de cuenta conservan sus formatos institucionales.
+Los documentos generados utilizan el logo y el nombre de la escuela configurados en **Configuración**, con Campus Frontera y los datos de contacto disponibles. Los reportes PDF repiten el membrete en cada página; las hojas Excel incluyen logo, encabezado institucional, fecha de emisión y encabezados de impresión. Las constancias, boletas y estados de cuenta conservan sus formatos institucionales.
 
 Las plantillas Excel también incluyen membrete. Sus columnas, celdas de captura y fórmulas siguen funcionando para volver a importar el archivo. Puedes actualizar el logo o los datos de la escuela desde Configuración; los cambios se reflejan en las nuevas descargas.

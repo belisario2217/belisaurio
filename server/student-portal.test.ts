@@ -100,6 +100,7 @@ describe("Student portal coursework and report", () => {
     expect(response.body.subjects.map((s:any)=>s.subject_id)).toEqual([f.current]);
     expect(response.body.subjects[0]).toMatchObject({recommended_period:3,status:"in_progress",course_cycle_name:`Activo ${sequence}`});
     expect(response.body.activeSubjects).toBeUndefined();
+    expect(response.body.attendance).toBeUndefined();
     expect(response.body.student.billing_start_date).toBe("2025-08-10");
     expect(studentPortalData(f.student).subjects.some(s=>s.subject_id===f.future)).toBe(true);
   });

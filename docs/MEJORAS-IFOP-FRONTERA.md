@@ -8,7 +8,7 @@ La lista distingue funciones nuevas para IFOP de funciones que IFOP ya tenía y 
 
 1. **Menú dividido por actividades — adaptado.** Inicio, Control académico, Finanzas, Información y documentos, Comunicación y Administración. Cada persona ve los módulos que corresponden a los permisos que ya tenía.
 2. **Reportes separados de Documentos — adaptado.** Reportes concentra consultas, listas y control del avance curricular. Documentos concentra boletas individuales o por grupo y constancias de estudios. Se mantienen las plantillas y datos institucionales de IFOP.
-3. **Orden alfabético por apellidos — ampliado.** El directorio de alumnos se ordena por apellido paterno, apellido materno y nombres. Las listas de grupos, asistencia, calificaciones, cobros y exportaciones mantienen su agrupación académica y aplican ese orden dentro de cada grupo.
+3. **Orden alfabético por apellidos — ampliado.** El directorio de alumnos se ordena por apellido paterno, apellido materno y nombres. Las listas de grupos, calificaciones, cobros y exportaciones mantienen su agrupación académica y aplican ese orden dentro de cada grupo.
 4. **Orden en catálogos y selectores — adaptado.** Los nombres se presentan en orden alfabético español, sin confundir la ñ con la n. Los selectores también consideran números para facilitar la lectura de nombres como Grupo 2 y Grupo 10. Los reportes académicos mantienen el orden de periodos y los rankings su orden por resultado.
 5. **Búsqueda rápida de alumnos — adaptado.** Botón de búsqueda en la cabecera y atajo Ctrl+K o Cmd+K para encontrar un alumno por nombre o matrícula y abrir directamente su expediente.
 6. **Inicio según el perfil — adaptado.** Administración y control escolar tienen indicadores y accesos a sus tareas; los docentes tienen su ficha y asignaciones; los alumnos continúan entrando a Mi avance.
@@ -24,7 +24,7 @@ La lista distingue funciones nuevas para IFOP de funciones que IFOP ya tenía y 
 
 ## Alumnos y avance curricular
 
-13. **Expediente individual — añadido.** Se abre al pulsar el nombre del alumno o desde su menú de acciones. Reúne datos personales, plan y grupo, avance académico, asistencia y, cuando corresponde a su vista, cobros.
+13. **Expediente individual — añadido.** Se abre al pulsar el nombre del alumno o desde su menú de acciones. Reúne datos personales, plan y grupo, avance académico y, cuando corresponde a su vista, cobros.
 14. **Avance visible en porcentaje — ampliado.** El expediente muestra porcentaje, materias acreditadas y créditos obtenidos respecto al total del plan. Mi avance conserva la consulta personal del alumno.
 15. **Materias pendientes, en curso y acreditadas — mejorado.** Los parciales incompletos se presentan como En curso. Una materia registrada como cursada puede formar parte del avance sin inventar una calificación numérica.
 16. **Próximos a egresar — añadido.** Administración puede colocar o quitar un distintivo desde el expediente y filtrar el directorio para ver esos alumnos. Es una marca administrativa; no cambia por sí sola su estatus ni acredita materias.
@@ -32,15 +32,15 @@ La lista distingue funciones nuevas para IFOP de funciones que IFOP ya tenía y 
 18. **Periodos del plan y periodos de evaluación — conservado.** Se distinguen la ubicación del alumno en su plan y los parciales de calificación. IFOP conserva sus semestres y calendarios; la adaptación no convierte automáticamente sus planes a cuatrimestres.
 19. **Modalidad En Línea — añadida.** Puede seleccionarse al crear o editar grupos. Tiene identificación LIN y aparece en los contextos de alumnos y documentos. Las modalidades Escolarizado, Semiescolarizado y Complementario se conservan.
 20. **Bachillerato como nivel — conservado.** IFOP ya incluía Bachillerato; permanece disponible junto con sus demás niveles. No se duplica el catálogo.
-21. **Mensajes y asistencia del alumno — conservado.** El alumno continúa consultando mensajes importantes, porcentajes de asistencia, calificaciones y estado de cuenta desde su propio portal.
+21. **Mensajes del alumno — conservado.** El alumno continúa consultando mensajes importantes, calificaciones y estado de cuenta desde su propio portal.
 
 ## Docentes y administración
 
 22. **Matrícula docente permanente — añadida.** Cada ficha docente recibe un identificador DOC. Permanece estable aunque se cambie el nombre, correo o número de empleado.
 23. **Usuario vinculado directamente al docente — añadido.** Desde Usuarios, el botón Vincular matrícula docente permite elegir la ficha correspondiente. Las coincidencias inequívocas existentes se conservan como una vinculación directa; los casos ambiguos requieren selección.
-24. **Vista docente con sus asignaciones — añadida.** Inicio presenta la ficha docente, su matrícula y sus materias, grupos y periodos asignados, con accesos a calificaciones y asistencia.
+24. **Vista docente con sus asignaciones — añadida.** Inicio presenta la ficha docente, su matrícula y sus materias, grupos y periodos asignados, con acceso a calificaciones.
 25. **Vista administrativa con indicadores reales — ampliado.** Inicio muestra alumnos, grupos y docentes activos, y el número de alumnos marcados próximos a egresar. Se conserva el panel de resultados académicos.
-26. **Accesos directos a tareas — añadido.** Tarjetas para alumnos y expedientes, captura de calificaciones, asistencia, documentos, reportes, importación y finanzas.
+26. **Accesos directos a tareas — añadido.** Tarjetas para alumnos y expedientes, captura de calificaciones, documentos, reportes, importación y finanzas.
 
 ## Asistente interno para cargar documentos
 

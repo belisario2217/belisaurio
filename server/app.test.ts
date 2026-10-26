@@ -240,7 +240,20 @@ describe("Aula Nova API", () => {
     expect(partialSubject.status).toBe("in_progress");
   });
 
-  it("restricts teachers to their groups and shares daily attendance across subjects", async () => {
+  it("retires attendance endpoints and reports while preserving historical records", async () => {
+    const group = db.prepare("SELECT id FROM groups LIMIT 1").get() as {id:number};
+    db.prepare("INSERT INTO attendance_days(group_id,attendance_date,status) VALUES(?,'2026-07-01','confirmed')").run(group.id);
+    const before = db.prepare("SELECT * FROM attendance_days WHERE group_id=? AND attendance_date='2026-07-01'").get(group.id);
+    const auth = {Authorization:`Bearer ${token}`};
+    await request(app).get("/api/attendance/groups").set(auth).expect(410);
+    await request(app).put(`/api/attendance/group/${group.id}`).set(auth)
+      .send({date:"2026-07-01",confirm:true,records:[]}).expect(410);
+    await request(app).get("/api/reports/data/attendance?format=xlsx").set(auth).expect(404);
+    expect(db.prepare("SELECT * FROM attendance_days WHERE group_id=? AND attendance_date='2026-07-01'").get(group.id)).toEqual(before);
+    expect(db.prepare("SELECT id FROM permissions WHERE code LIKE 'attendance.%'").all()).toEqual([]);
+  });
+
+  it("restricts teachers to their groups and allows grading without attendance", async () => {
     const roles = await request(app).get("/api/users/roles/list").set("Authorization", `Bearer ${token}`);
     const teacherRole = roles.body.find((role: any) => role.name === "Docente");
     const createdUser = await request(app)
@@ -297,75 +310,11 @@ describe("Aula Nova API", () => {
     expect(registrationPayment.status).toBe(201);
     expect(registrationPayment.body.billing.payments.find((payment: any) => payment.folio === "REG-ATT-001").concept_type).toBe("enrollment");
 
-    const groupId = assignment.group_id;
-    const attendanceGroups = await request(app).get("/api/attendance/groups").set("Authorization", `Bearer ${teacherToken}`);
-    expect(attendanceGroups.status).toBe(200);
-    expect(attendanceGroups.body.filter((g: any) => g.id === groupId)).toHaveLength(1);
-    const allGroups = await request(app).get("/api/attendance/groups").set("Authorization", `Bearer ${token}`);
-    const outsideGroup = allGroups.body.find((g: any) => !attendanceGroups.body.some((visible: any) => visible.id === g.id));
-    expect(outsideGroup).toBeTruthy();
-    await request(app).get(`/api/attendance/group/${outsideGroup.id}?date=2026-08-01`).set("Authorization", `Bearer ${teacherToken}`).expect(403);
-    // Existing monthly totals remain available as history and never inflate daily percentages.
-    const oldMonth = db.prepare("INSERT INTO attendance_months(assignment_id, month, scheduled_classes, status) VALUES (?, '2026-08', 31, 'confirmed')").run(assignment.id);
-    db.prepare("INSERT INTO attendance_records(attendance_month_id, enrollment_id, attended_classes) VALUES (?, ?, 31)").run(oldMonth.lastInsertRowid, target.enrollment_id);
-    for (let day = 1; day <= 10; day++) {
-      const attendance = await request(app).put(`/api/attendance/group/${groupId}`)
-        .set("Authorization", `Bearer ${teacherToken}`).send({ date: `2026-08-${String(day).padStart(2, "0")}`, revision: 0, confirm: true,
-          records: roster.body.students.map((student: any) => ({ enrollmentId: student.enrollment_id,
-            status: day <= (student.enrollment_id === target.enrollment_id ? 8 : 7) ? "present" : "absent" })) });
-      expect(attendance.status).toBe(200);
-    }
-    const sharedAssignments = allAssignments.body.filter((a: any) => a.group_id === groupId);
-    for (const other of sharedAssignments) {
-      const shared = await request(app).get(`/api/grades/assignment/${other.id}/roster`).set("Authorization", `Bearer ${token}`);
-      expect(shared.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).eligibility.attendancePercentage).toBe(80);
-    }
-    const snapshot = await request(app).get(`/api/attendance/group/${groupId}?date=2026-08-01`).set("Authorization", `Bearer ${teacherToken}`);
-    expect(snapshot.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).summary).toMatchObject({ scheduled_days: 10, attended_days: 8, percentage: 80 });
-    expect(snapshot.body.legacy.some((r: any) => r.attended_classes === 31)).toBe(true);
-    const dailyRecords = roster.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" }));
-    const stale = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-01", revision: 0, confirm: true, records: dailyRecords });
-    expect(stale.status).toBe(409);
-    const resaved = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-01", revision: snapshot.body.day.revision, confirm: true, records: dailyRecords });
-    expect(resaved.status).toBe(200);
-    const draft = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-11", revision: 0, confirm: false, records: dailyRecords });
-    expect(draft.status).toBe(200);
-    const invalidDate = await request(app).get(`/api/attendance/group/${groupId}?date=2026-02-30`).set("Authorization", `Bearer ${teacherToken}`);
-    expect(invalidDate.status).toBe(400);
-    const incomplete = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-12", revision: 0, confirm: true, records: dailyRecords.slice(0, 1) });
-    expect(incomplete.status).toBe(400);
-    const noMark = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-12", revision: 0, confirm: true, records: dailyRecords.map((r: any) => ({ ...r, status: "" })) });
-    expect(noMark.status).toBe(400);
-    const duplicateRecords = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-12", revision: 0, confirm: true, records: [...dailyRecords, dailyRecords[0]] });
-    expect(duplicateRecords.status).toBe(400);
-    const foreignRecord = await request(app).put(`/api/attendance/group/${groupId}`).set("Authorization", `Bearer ${teacherToken}`)
-      .send({ date: "2026-08-12", revision: 0, confirm: true, records: [{ enrollmentId: 999999, status: "present" }, ...dailyRecords] });
-    expect(foreignRecord.status).toBe(400);
-    // A transferred pupil still cannot receive a second mark for the same date in another group.
-    db.prepare("UPDATE enrollments SET group_id = ? WHERE id = ?").run(outsideGroup.id, target.enrollment_id);
-    const otherRoster = await request(app).get(`/api/attendance/group/${outsideGroup.id}?date=2026-08-01`).set("Authorization", `Bearer ${token}`);
-    const doubleDay = await request(app).put(`/api/attendance/group/${outsideGroup.id}`).set("Authorization", `Bearer ${token}`)
-      .send({ date: "2026-08-01", revision: 0, confirm: true, records: otherRoster.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" })) });
-    expect(doubleDay.status).toBe(409);
-    db.prepare("UPDATE enrollments SET group_id = ? WHERE id = ?").run(groupId, target.enrollment_id);
-    const oldEndpoint = await request(app).put(`/api/attendance/assignment/${assignment.id}`).set("Authorization", `Bearer ${teacherToken}`).send({});
-    expect(oldEndpoint.status).toBe(410);
-    const studentLogin = await request(app).post("/api/auth/login").send({ email: "an26001@alumnoifop.edu", password: "Alumno123!" });
-    const attendancePortal = await request(app).get("/api/portal").set("Authorization", `Bearer ${studentLogin.body.token}`);
-    expect(attendancePortal.body.attendance).toHaveLength(1);
-    expect(attendancePortal.body.attendance[0].scheduled_days).toBe(10);
-
     const refreshed = await request(app)
       .get(`/api/grades/assignment/${assignment.id}/roster`)
       .set("Authorization", `Bearer ${teacherToken}`);
     const eligibleStudent = refreshed.body.students.find((student: any) => student.enrollment_id === target.enrollment_id);
-    expect(eligibleStudent.eligibility.attendancePercentage).toBe(80);
+    expect(eligibleStudent.eligibility.attendancePercentage).toBeUndefined();
     expect(eligibleStudent.eligibility.registrationPaid).toBe(true);
     expect(eligibleStudent.eligibility.eligible).toBe(true);
     expect(refreshed.body.students.find((student: any) => student.enrollment_id !== target.enrollment_id).eligibility.eligible).toBe(false);
@@ -375,56 +324,6 @@ describe("Aula Nova API", () => {
       .set("Authorization", `Bearer ${teacherToken}`)
       .send({ grades: [{ enrollmentId: target.enrollment_id, partials: { partial1: 9, partial2: 9, partial3: 9 } }] });
     expect(grade.status).toBe(200);
-  });
-
-  it("uses the group's configured class days for monthly attendance and validates totals", async () => {
-    const auth = { Authorization: `Bearer ${token}` };
-    const groups = await request(app).get("/api/attendance/groups").set(auth);
-    const group = groups.body.find((g: any) => g.group_name === "1A");
-    const before = await request(app).get(`/api/attendance/group/${group.id}?date=2026-08-01`).set(auth);
-    const target = before.body.students.find((s: any) => s.summary.attended_days === 8);
-    const setDays = (month: string, classDays: unknown, revision = 0) => request(app)
-      .put(`/api/attendance/group/${group.id}/month`).set(auth).send({ month, classDays, revision });
-    await setDays("2026-08", 20).expect(200);
-    const after = await request(app).get(`/api/attendance/group/${group.id}?date=2026-08-15`).set(auth);
-    expect(after.body.monthSettings).toMatchObject({ class_days: 20, revision: 1 });
-    expect(after.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).summary)
-      .toMatchObject({ scheduled_days: 20, attended_days: 8, percentage: 40 });
-    const assignments = await request(app).get("/api/grades/assignments").set(auth);
-    for (const a of assignments.body.filter((a: any) => a.group_id === group.id)) {
-      const roster = await request(app).get(`/api/grades/assignment/${a.id}/roster`).set(auth);
-      expect(roster.body.students.find((s: any) => s.enrollment_id === target.enrollment_id).eligibility.attendancePercentage).toBe(40);
-    }
-    const login = await request(app).post("/api/auth/login").send({ email: "an26001@alumnoifop.edu", password: "Alumno123!" });
-    const portal = await request(app).get("/api/portal").set("Authorization", `Bearer ${login.body.token}`);
-    const monthly = portal.body.attendance.find((m: any) => m.month === "2026-08");
-    expect(monthly.scheduled_days).toBe(20);
-    expect(monthly.percentage).toBe(monthly.attended_days / 20 * 100);
-    await setDays("2026-08", 9, 1).expect(400);
-    await setDays("2026-08", 21, 0).expect(409);
-    await setDays("2026-02", 29).expect(400);
-    await setDays("2026-02", -1).expect(400);
-    await setDays("2026-02", 2.5).expect(400);
-    await setDays("2026-02", "").expect(400);
-    await setDays("2026-13", 20).expect(400);
-    await setDays("2028-02", 29).expect(200);
-    await setDays("2026-03", 0).expect(200);
-    const empty = await request(app).get(`/api/attendance/group/${group.id}?date=2026-03-01`).set(auth);
-    expect(empty.body.students[0].summary).toMatchObject({ scheduled_days: 0, attended_days: 0, percentage: 0 });
-    await setDays("2026-04", 20).expect(200);
-    const noLists = await request(app).get(`/api/attendance/group/${group.id}?date=2026-04-01`).set(auth);
-    expect(noLists.body.students[0].summary).toMatchObject({ scheduled_days: 20, attended_days: 0, percentage: 0 });
-    await setDays("2026-08", 10, 1).expect(200);
-    await request(app).put(`/api/attendance/group/${group.id}`).set(auth).send({ date: "2026-08-11", revision: 1, confirm: true,
-      records: before.body.students.map((s: any) => ({ enrollmentId: s.enrollment_id, status: "present" })) }).expect(409);
-    const anotherGroup = groups.body.find((g: any) => g.id !== group.id);
-    const other = await request(app).get(`/api/attendance/group/${anotherGroup.id}?date=2026-08-01`).set(auth);
-    expect(other.body.monthSettings.class_days).toBeNull();
-    const teacher = await request(app).post("/api/auth/login").send({ email: "laura.mendez@aulanova.edu.mx", password: "Docente123!" });
-    await request(app).put(`/api/attendance/group/${anotherGroup.id}/month`).set("Authorization", `Bearer ${teacher.body.token}`)
-      .send({ month: "2026-08", classDays: 20, revision: 0 }).expect(403);
-    await request(app).put(`/api/attendance/group/${group.id}/month`).set("Authorization", `Bearer ${login.body.token}`)
-      .send({ month: "2026-08", classDays: 20, revision: 2 }).expect(403);
   });
 
   it("creates a complete academic plan with mandatory and elective subjects", async () => {
@@ -1293,38 +1192,6 @@ describe("Aula Nova API", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(groupReport.status).toBe(200);
     expect(groupReport.body.length).toBeGreaterThan(1000);
-  });
-
-  it("generates the institutional attendance list for every modality", async () => {
-    const groups = await request(app).get("/api/catalogs/groups").set("Authorization", `Bearer ${token}`);
-    const group = groups.body.records.find((item: any) => item.name === "1A");
-    const workbookResponse = await request(app)
-      .get(`/api/reports/data/attendance?format=xlsx&groupId=${group.id}&mode=semiescolarizado&month=2026-08`)
-      .set("Authorization", `Bearer ${token}`)
-      .buffer(true)
-      .parse(binaryParser);
-    expect(workbookResponse.status).toBe(200);
-    expect(workbookResponse.headers["content-type"]).toContain("spreadsheetml");
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(workbookResponse.body);
-    const sheet = workbook.worksheets[0];
-    expect(workbook.worksheets).toHaveLength(1);
-    expect(sheet.getCell("J7").value).toBe("TODAS LAS MATERIAS");
-    expect(sheet.getCell("C2").value).toContain("CAMPUS FRONTERA");
-    expect(sheet.getCell("A5").value).toBe("LISTA DE ASISTENCIA");
-    expect(sheet.getCell("U7").value).toBe(group.name);
-    expect(sheet.getCell("F13").value).toBe("S");
-    expect(sheet.getCell("B14").value).toBeTruthy();
-    expect(sheet.pageSetup.orientation).toBe("landscape");
-    expect(sheet.pageSetup.printArea).toBe("A1:X37");
-
-    const complementaryPdf = await request(app)
-      .get(`/api/reports/data/attendance?format=pdf&groupId=${group.id}&mode=complementario&month=2026-08`)
-      .set("Authorization", `Bearer ${token}`);
-    expect(complementaryPdf.status).toBe(200);
-    expect(complementaryPdf.headers["content-type"]).toContain("application/pdf");
-    expect(complementaryPdf.body.length).toBeGreaterThan(3_000);
-    expect(complementaryPdf.body.toString("latin1").match(/\/Type\s*\/Page\b/g)?.length).toBeGreaterThan(0);
   });
 
   it("promotes a student only with recent tuition and target-semester registration", async () => {

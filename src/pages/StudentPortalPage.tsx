@@ -54,12 +54,6 @@ type PortalData = {
   };
   registration: { paid: number; paid_at: string | null; concept: string | null };
   promotion: { eligible: boolean; targetPeriodNumber: number; overdueMonths: number; overdueAmount: number; reasons: string[] };
-  attendance: Array<{
-    month: string;
-    scheduled_days: number;
-    attended_days: number;
-    percentage: number;
-  }>;
   gradeSubjects: PortalData["subjects"];
   subjects: Array<{
     plan_subject_id: number | null;
@@ -83,7 +77,7 @@ function money(value: unknown) {
   return Number(value ?? 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
-export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "grades" | "payments" | "attendance" }) {
+export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "grades" | "payments" }) {
   const { user } = useAuth();
   const toast = useToast();
   const [data, setData] = useState<PortalData | null>(null);
@@ -134,7 +128,7 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
   if (error) return <EmptyState icon={<GraduationCap size={27} />} title="Tu expediente no esta disponible" text={error} />;
   if (!data) return <div className="loading-panel">Cargando avance curricular...</div>;
 
-  const { student, progress, billing, attendance, registration } = data;
+  const { student, progress, billing, registration } = data;
   const semesters = [...new Set([student.current_period_number, ...data.gradeSubjects.map(subject => subject.recommended_period)]
     .filter((semester): semester is number => semester != null))].sort((a, b) => a - b);
   const subjects = data.gradeSubjects.filter(subject => subject.recommended_period === selectedSemester);
@@ -188,7 +182,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
       <div className="portal-section-links">
         <Link to="/mis-calificaciones"><BookOpenCheck size={22} /><strong>Mis calificaciones</strong><span>Calificaciones por semestre y boleta del alumno</span><ArrowRight size={18} /></Link>
         <Link to="/mis-pagos"><ReceiptText size={22} /><strong>Mis pagos</strong><span>Colegiaturas e historial de pagos</span><ArrowRight size={18} /></Link>
-        <Link to="/mi-asistencia"><CalendarCheck size={22} /><strong>Mi asistencia</strong><span>Consulta tus días de clase</span><ArrowRight size={18} /></Link>
       </div>
       </>}
 
@@ -226,14 +219,6 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
       </section>
 
       </>}
-
-      {view === "attendance" && <section className="table-section">
-        <header className="section-heading"><div><span>Común a todas mis materias</span><h2>Mi asistencia por día</h2></div><strong className="table-sub">Resumen mensual · Mínimo para evaluación: 80%</strong></header>
-        <div className="table-wrap"><table><thead><tr><th>Mes</th><th>Días presentes</th><th>Días de clase</th><th>Porcentaje</th><th>Condición</th></tr></thead><tbody>
-          {attendance.map((row) => <tr key={row.month}><td>{row.month}</td><td>{row.attended_days}</td><td>{row.scheduled_days}</td><td><strong className={row.percentage >= 80 ? "grade-pass-text" : "grade-fail-text"}>{Number(row.percentage).toFixed(1)}%</strong></td><td><StatusBadge active={row.percentage >= 80} label={row.percentage >= 80 ? "CUMPLE" : "NO CUMPLE"} /></td></tr>)}
-        </tbody></table></div>
-        {!attendance.length && <EmptyState icon={<CalendarCheck size={25} />} title="Asistencia pendiente" text="Todavía no hay días de asistencia confirmados." />}
-      </section>}
 
       {view === "grades" && <section className="portal-subjects">
         <header className="section-heading">

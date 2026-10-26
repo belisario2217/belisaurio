@@ -38,7 +38,7 @@ async function pay(f:ReturnType<typeof fixture>, physical:string, amount=1000, c
   expect(response.status).toBe(201);
   return response.body.billing.payments.find((p:any)=>p.folio===folio).id as number;
 }
-const remove = (source:string,id:number) => request(app).delete(`/api/payments/folios/${source}/${id}`).set("Authorization",auth);
+const remove = (id:number) => request(app).delete(`/api/payments/${id}`).set("Authorization",auth);
 const portal = (f:ReturnType<typeof fixture>) => request(app).get("/api/portal").set("Authorization",f.studentAuth);
 function binary(response:any,callback:any) {
   const chunks:Buffer[]=[]; response.on("data",(b:Buffer)=>chunks.push(b)); response.on("end",()=>callback(null,Buffer.concat(chunks)));
@@ -50,7 +50,7 @@ describe("Deleting receipt records",()=>{
     const keep=await pay(f,"72101"), duplicate=await pay(f,"72101");
     const balanceBefore=(await adminGet(`/improvements/balance?month=${month}`)).body;
     const overviewBefore=(await adminGet(`/payments/overview?month=${month}`)).body;
-    await remove("payment",duplicate).expect(204);
+    await remove(duplicate).expect(204);
     const account=(await adminGet(`/payments/student/${f.student}`)).body;
     expect(account.billing.payments.map((p:any)=>p.id)).toEqual([keep]);
     expect(account.billing.summary).toMatchObject({paidAmount:1000,tuitionPaidAmount:1000,balance:0,paidInstallments:1});
@@ -61,15 +61,13 @@ describe("Deleting receipt records",()=>{
     const grid=await adminGet(`/payments/tuition-grid?groupId=${f.group}&startMonth=${month}&months=1`);
     expect(grid.body.records[0].months[0].paid).toBe(true);
     expect(get<{payment_id:number}>("SELECT payment_id FROM student_tuition_charges WHERE student_id=? AND billing_month=?",f.student,month)!.payment_id).toBe(keep);
-    const listed=(await adminGet("/payments/folios")).body.folios.filter((p:any)=>p.student_id===f.student);
-    expect(listed.map((p:any)=>p.id)).toEqual([keep]);
     const student=await portal(f); expect(student.status).toBe(200); expect(student.body.billing.summary.paidAmount).toBe(1000);
     const statement=await adminGet(`/payments/student/${f.student}/statement?format=xlsx&throughMonth=${month}`).buffer(true).parse(binary).expect(200);
     const workbook=new ExcelJS.Workbook(); await workbook.xlsx.load(statement.body);
     const issued=get<{snapshot_json:string}>("SELECT snapshot_json FROM issued_documents WHERE student_id=? AND document_type='account_statement' ORDER BY rowid DESC LIMIT 1",f.student)!;
     const snapshot=JSON.parse(issued.snapshot_json);
     expect(snapshot.content.totalPaid).toBe(1000); expect(snapshot.content.payments).toHaveLength(1);
-    await remove("payment",keep).expect(204);
+    await remove(keep).expect(204);
     const final=(await adminGet(`/payments/student/${f.student}`)).body;
     expect(final.billing.summary).toMatchObject({paidAmount:0,balance:1000,paidInstallments:0});
     expect((await adminGet(`/payments/tuition-grid?groupId=${f.group}&startMonth=${month}&months=1`)).body.records[0].months[0].paid).toBe(false);
@@ -79,16 +77,14 @@ describe("Deleting receipt records",()=>{
     expect(get("SELECT id FROM activity_logs WHERE action='delete' AND entity_type='student_payments' AND entity_id=?",String(duplicate))).toBeTruthy();
   });
 
-  it.each(["folios","cobros"])("does not resurrect manual registration after deleting its payment from %s",async section=>{
+  it("does not resurrect manual registration after deleting its payment from Cobros",async()=>{
     const f=fixture();
     const registration=await request(app).post(`/api/students/${f.student}/registration-status`).set("Authorization",auth).send({status:"paid",periodNumber:3,physicalFolio:"72102",amount:750,paidAt:today}).expect(200);
     expect(registration.body.registration_paid).toBe(1);
     const manual=get<{id:number;payment_id:number}>("SELECT id,payment_id FROM student_registration_status WHERE enrollment_id=?",f.enrollment)!;
     const before=(await adminGet(`/improvements/balance?month=${month}`)).body;
-    if(section==="folios") await remove("payment",manual.payment_id).expect(204);
-    else await request(app).delete(`/api/payments/${manual.payment_id}`).set("Authorization",auth).expect(204);
+    await remove(manual.payment_id).expect(204);
     expect(get("SELECT id FROM student_registration_status WHERE id=?",manual.id)).toBeUndefined();
-    expect((await adminGet("/payments/folios")).body.folios.filter((p:any)=>p.student_id===f.student)).toEqual([]);
     expect((await adminGet(`/payments/student/${f.student}`)).body.registration.paid).toBe(0);
     expect((await portal(f)).body.registration.paid).toBe(0);
     expect((await adminGet(`/students/record/${f.student}`)).body.registration_paid).toBe(0);
@@ -103,23 +99,20 @@ describe("Deleting receipt records",()=>{
     const keep=Number(run(`INSERT INTO student_payments(student_id,enrollment_id,plan_id,folio,amount,paid_at,concept,concept_type,registration_period_number,notes)
       SELECT student_id,enrollment_id,plan_id,folio||'-DUPLICATE',amount,paid_at,concept,concept_type,registration_period_number,notes
       FROM student_payments WHERE id=?`,manual.payment_id).lastInsertRowid);
-    await remove("payment",manual.payment_id).expect(204);
+    await remove(manual.payment_id).expect(204);
     const account=(await adminGet(`/payments/student/${f.student}`)).body;
     expect(account.registration.paid).toBe(1); expect(account.billing.payments.map((p:any)=>p.id)).toEqual([keep]);
     expect((await portal(f)).body.registration.paid).toBe(1);
   });
 
-  it("deletes legacy unlinked registration records without mistaking their IDs for payment IDs",async()=>{
+  it("retires folio operations without deleting existing payments or manual registrations",async()=>{
     const f=fixture();
     const id=Number(run("INSERT INTO student_registration_status(enrollment_id,period_number,status,physical_folio,amount,paid_at) VALUES(?,3,'paid','72104',450,?)",f.enrollment,today).lastInsertRowid);
     const keep=await pay(f,"72105",100,"Otros conceptos");
-    const manual=(await adminGet("/payments/folios")).body.folios.find((p:any)=>p.source==="registration"&&p.id===-id);
-    expect(manual).toBeTruthy();
-    await remove("registration",id).expect(204);
-    expect(get("SELECT id FROM student_registration_status WHERE id=?",id)).toBeUndefined();
+    await request(app).delete(`/api/payments/folios/registration/${id}`).set("Authorization",auth).expect(410);
+    await request(app).delete(`/api/payments/folios/payment/${keep}`).set("Authorization",auth).expect(410);
+    expect(get("SELECT id FROM student_registration_status WHERE id=?",id)).toBeTruthy();
     expect(get("SELECT id FROM student_payments WHERE id=?",keep)).toBeTruthy();
-    expect((await portal(f)).body.registration.paid).toBe(0);
-    await remove("registration",id).expect(404);
   });
 
   it("checks permissions and rejects stale or invalid records without changing financial data",async()=>{
@@ -128,20 +121,18 @@ describe("Deleting receipt records",()=>{
     run("INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE code='payments.view'",role);
     const reader=Number(run("INSERT INTO users(full_name,email,password_hash,role_id) VALUES('Consulta','folio-reader@example.invalid','unused',?)",role).lastInsertRowid);
     const readerAuth=`Bearer ${signToken(loadUser(reader)!)}`;
-    await request(app).delete(`/api/payments/folios/payment/${id}`).expect(401);
+    await request(app).delete(`/api/payments/${id}`).expect(401);
     for(const authorization of [f.studentAuth,readerAuth]) {
-      await request(app).delete(`/api/payments/folios/payment/${id}`).set("Authorization",authorization).expect(403);
-      await request(app).delete(`/api/payments/folios/registration/${id}`).set("Authorization",authorization).expect(403);
+      await request(app).delete(`/api/payments/${id}`).set("Authorization",authorization).expect(403);
     }
-    await remove("invalid",id).expect(400); await remove("payment",99999999).expect(404);
-    await remove("payment",0).expect(400);
+    await remove(99999999).expect(404);
+    await remove(0).expect(400);
     const linked=Number(run("INSERT INTO student_registration_status(enrollment_id,period_number,status,payment_id) VALUES(?,3,'paid',?)",f.enrollment,id).lastInsertRowid);
-    await remove("registration",linked).expect(409);
     expect(get("SELECT id FROM student_payments WHERE id=?",id)).toBeTruthy();
     // An audit failure must roll back every related record, not leave half a deletion.
     db.exec("CREATE TEMP TRIGGER fail_delete_audit BEFORE INSERT ON activity_logs WHEN NEW.action='delete' BEGIN SELECT RAISE(ABORT,'synthetic audit failure'); END");
     const logged = vi.spyOn(console,"error").mockImplementation(()=>{});
-    try { await remove("payment",id).expect(500); }
+    try { await remove(id).expect(500); }
     finally { db.exec("DROP TRIGGER fail_delete_audit"); logged.mockRestore(); }
     expect(get("SELECT id FROM student_payments WHERE id=?",id)).toBeTruthy();
     expect(get("SELECT id FROM student_registration_status WHERE id=?",linked)).toBeTruthy();

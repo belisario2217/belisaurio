@@ -14,7 +14,6 @@ export function WorkspacePage() {
   const actions = [
     { to:'/alumnos', label:'Alumnos y expedientes', description:'Consulta fichas, avance y próximos egresos.', permission:'students.view', icon:GraduationCap },
     { to:'/calificaciones',label:'Calificaciones',description:'Captura y revisa resultados por grupo y materia.',permission:'grades.view',icon:BookOpenCheck },
-    { to:'/asistencia',label:'Asistencia',description:'Consulta las listas de tus grupos asignados.',permission:'attendance.view',icon:School },
     { to:'/documentos',label:'Documentos oficiales',description:'Genera boletas y constancias de estudios.',permission:'reports.view',icon:FileText },
     { to:'/reportes',label:'Reportes y avance',description:'Consulta resultados y administra el avance curricular.',permission:'reports.view',icon:CircleGauge },
     { to:'/balance',label:'Balance mensual',description:'Compara ingresos, egresos y nómina.',permission:'payments.view',icon:ReceiptText },
@@ -26,7 +25,7 @@ export function WorkspacePage() {
     {!data&&!error&&<LoadingState label="Preparando tu vista"/>}
     {data?.counts&&<section className="metric-grid">{Object.entries(data.counts).map(([key,count])=><article className="metric" key={key}><UsersRound/><div><span>{{students:'Alumnos activos',groups:'Grupos activos',teachers:'Docentes activos',nearGraduation:'Próximos a egresar'}[key]}</span><strong>{count}</strong></div></article>)}</section>}
     {data?.teacher&&<section className="panel"><div className="panel-heading"><div><span>Mi perfil docente</span><h3>{data.teacher.full_name}</h3></div><GraduationCap/></div><p className="workspace-help">Matrícula docente: <strong>{data.teacher.teacher_number}</strong>{data.teacher.specialty&&` · ${data.teacher.specialty}`}. Tu cuenta está ligada directamente a esta ficha.</p>
-      <div className="table-wrap"><table><thead><tr><th>Grupo</th><th>Materia</th><th>Evaluación</th><th>Acciones</th></tr></thead><tbody>{data.assignments?.map(a=><tr key={a.id}><td>{a.group_name}</td><td>{a.subject_name}</td><td>{a.period_name}</td><td><Link to="/calificaciones">Ver calificaciones</Link> · <Link to="/asistencia">Asistencia</Link></td></tr>)}</tbody></table></div>{!data.assignments?.length&&<EmptyState icon={<School/>} title="Sin materias asignadas" text="Tus grupos y materias aparecerán cuando administración los vincule a tu ficha docente."/>}</section>}
+      <div className="table-wrap"><table><thead><tr><th>Grupo</th><th>Materia</th><th>Evaluación</th><th>Acciones</th></tr></thead><tbody>{data.assignments?.map(a=><tr key={a.id}><td>{a.group_name}</td><td>{a.subject_name}</td><td>{a.period_name}</td><td><Link to="/calificaciones">Ver calificaciones</Link></td></tr>)}</tbody></table></div>{!data.assignments?.length&&<EmptyState icon={<School/>} title="Sin materias asignadas" text="Tus grupos y materias aparecerán cuando administración los vincule a tu ficha docente."/>}</section>}
     <section className="workspace-grid">{actions.filter(a=>can(a.permission)).map(a=><Link key={a.to} to={a.to} className="workspace-card"><a.icon size={26}/><h3>{a.label}</h3><p>{a.description}</p></Link>)}</section>
     {can('analytics.view')&&<DashboardPage/>}
   </div>;

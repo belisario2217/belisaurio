@@ -70,7 +70,7 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
-  it("muestra todos los folios físicos de cobros ordenados desde 0001, incluso mayores de 1000 y 9999", async () => {
+  it("conserva los folios físicos en Cobros, incluso mayores de 1000 y 9999", async () => {
     const f = fixture();
     const folioRecords = ["10000", "0099", "1001", "0002", "9999", "0001"];
     const ids: number[] = [];
@@ -83,15 +83,11 @@ describe("Official documents", () => {
       expect(result.status).toBe(201);
       ids.push(result.body.billing.payments.find((p:any)=>p.folio===`DOCUMENT-FOLIO-${index}-${f.student}`).id);
     }
-    const response=await request(app).get("/api/payments/folios").set("Authorization",auth);
-    expect(response.status).toBe(200);
-    const ours=response.body.folios.filter((row:any)=>ids.includes(row.id));
-    expect(ours.map((row:any)=>row.physical_folio)).toEqual(["0001","0002","0099","1001","9999","10000"]);
-    expect(ours.every((row:any)=>row.student_number.startsWith("DOC-"))).toBe(true);
-    expect(response.body.total).toBe(response.body.folios.length);
-    const csv=await request(app).get("/api/payments/folios/export").set("Authorization",auth);
-    expect(csv.status).toBe(200);expect(csv.text).toContain("Folio físico");
-    expect(csv.text).toContain("10000");
+    const response=await request(app).get(`/api/payments/student/${f.student}`).set("Authorization",auth).expect(200);
+    expect(response.body.billing.payments.filter((row:any)=>ids.includes(row.id)).map((row:any)=>row.notes).sort())
+      .toEqual([...folioRecords].sort());
+    await request(app).get("/api/payments/folios").set("Authorization",auth).expect(410);
+    await request(app).get("/api/payments/folios/export").set("Authorization",auth).expect(410);
     await request(app).get("/api/payments/folios").expect(401);
   });
 
@@ -142,7 +138,7 @@ describe("Official documents", () => {
     }
   });
 
-  it("prints the clean degree in attendance lists and student exports without changing catalog or import names", async () => {
+  it("prints the clean degree in student exports without changing catalog or import names", async () => {
     const f = fixture(), programName = "Licenciatura en Enfermería IFOP";
     run("UPDATE programs SET name=? WHERE id=?", programName, f.program);
     const teacher = get<{id:number}>("SELECT id FROM teachers LIMIT 1")!.id;
@@ -150,7 +146,6 @@ describe("Official documents", () => {
     const assignment = Number(run("INSERT INTO subject_assignments(subject_id,group_id,teacher_id,period_id,grading_scale_id,evaluation_mode) VALUES(?,?,?,?,?,'partials')", f.subjects[2], f.group, teacher, f.period, scale).lastInsertRowid);
     run("INSERT INTO grades(enrollment_id,assignment_id,partial_1,status) VALUES(?,?,8,'pending')", f.enrollment, assignment);
     for (const url of [
-      `/reports/data/attendance?groupId=${f.group}&format=xlsx`,
       `/reports/student-list?groupId=${f.group}&format=xlsx`,
       `/reports/data/students?groupId=${f.group}&format=xlsx`,
       "/students/export/file?format=xlsx",
@@ -165,7 +160,6 @@ describe("Official documents", () => {
       expect(cells.join(" "), url).not.toContain(programName);
     }
     for (const url of [
-      `/reports/data/attendance?groupId=${f.group}&format=pdf`,
       `/reports/student-list?groupId=${f.group}&format=pdf`
     ]) {
       const response = await download(url);

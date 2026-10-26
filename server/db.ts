@@ -362,25 +362,6 @@ function ensureEnhancementData() {
        WHERE r.name IN ('Administrador', 'Coordinador acadÃ©mico')
        AND p.code IN ('payments.view', 'payments.manage', 'payments.export')`
     );
-    [
-      ["attendance.view", "Consultar asistencia", "attendance"],
-      ["attendance.manage", "Capturar y confirmar asistencia", "attendance"]
-    ].forEach(([code, name, module]) =>
-      run("INSERT OR IGNORE INTO permissions(code, name, module) VALUES (?, ?, ?)", code, name, module)
-    );
-    run(
-      `INSERT OR IGNORE INTO role_permissions(role_id, permission_id)
-       SELECT r.id, p.id FROM roles r, permissions p
-       WHERE r.name IN ('Administrador', 'Coordinador académico', 'Coordinador acadÃ©mico', 'Docente', 'Control escolar')
-       AND p.code = 'attendance.view'`
-    );
-    run(
-      `INSERT OR IGNORE INTO role_permissions(role_id, permission_id)
-       SELECT r.id, p.id FROM roles r, permissions p
-       WHERE r.name IN ('Administrador', 'Coordinador académico', 'Coordinador acadÃ©mico', 'Docente')
-       AND p.code = 'attendance.manage'`
-    );
-
     const student = get<{ id: number; full_name: string }>(
       `SELECT id, TRIM(first_name || ' ' || last_name || ' ' || COALESCE(second_last_name, '')) AS full_name
        FROM students st
