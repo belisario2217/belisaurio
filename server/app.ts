@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { serveFrontend } from "./services/frontend-static.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -80,13 +81,7 @@ app.use("/api/improvements", authenticate, improvementsRouter);
 app.use("/api/import-assistant", authenticate, importAssistantRouter);
 
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(root, "dist")));
-  app.use((req, res, next) => {
-    if (req.method === "GET" && req.accepts("html")) {
-      return res.sendFile(path.join(root, "dist", "index.html"));
-    }
-    next();
-  });
+  serveFrontend(app, path.join(root, "dist"));
 }
 
 app.use((_req, res) => res.status(404).json({ message: "Ruta no encontrada." }));

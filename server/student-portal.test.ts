@@ -65,6 +65,19 @@ async function pdfText(buffer: Buffer) {
 }
 
 describe("Student portal coursework and report", () => {
+  it("synchronizes only the visiting student's automatic subjects and preserves manual status overrides", async () => {
+    const visiting = fixture(), other = fixture();
+    for (const f of [visiting, other]) run("UPDATE student_subjects SET status='pending',status_manual_override=0 WHERE student_id=? AND subject_id=?", f.student, f.current);
+    await request(app).get("/api/portal").set("Authorization",visiting.auth).expect(200);
+    expect(get("SELECT status FROM student_subjects WHERE student_id=? AND subject_id=?",visiting.student,visiting.current)).toMatchObject({status:"in_progress"});
+    expect(get("SELECT status FROM student_subjects WHERE student_id=? AND subject_id=?",other.student,other.current)).toMatchObject({status:"pending"});
+    expect(get("SELECT status FROM student_subjects WHERE student_id=? AND subject_id=?",visiting.student,visiting.pending)).toMatchObject({status:"pending"});
+    const {syncAcademicSubjectStatuses} = await import("./services/academic-calendar.js");
+    syncAcademicSubjectStatuses();
+    expect(get("SELECT status FROM student_subjects WHERE student_id=? AND subject_id=?",other.student,other.current)).toMatchObject({status:"in_progress"});
+    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM student_subjects WHERE status='pending' AND status_manual_override=0 AND student_id=?").all(visiting.student);
+    expect(plan.map(row=>row.detail).join(" ")).toContain("idx_student_subjects_auto_pending");
+  });
   it("exposes recorded grades by semester even when completed coursework has no active teaching assignment", async () => {
     const f = fixture();
     const direct = f.addSubject("Calificación curricular directa", 3, "completed", f.oldCycle, 9);

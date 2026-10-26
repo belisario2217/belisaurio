@@ -82,7 +82,7 @@ export function academicStatusForCycle(cycleId: number): "pending" | "in_progres
   return started ? "in_progress" : "pending";
 }
 
-export function syncAcademicSubjectStatuses() {
+export function syncAcademicSubjectStatuses(studentId?: number) {
   const today = localDate();
   const pending = all<PendingSubject>(
     `SELECT ss.id, sc.id AS cycle_id, sc.start_date AS cycle_start, sc.end_date AS cycle_end
@@ -93,8 +93,11 @@ export function syncAcademicSubjectStatuses() {
      JOIN institution_settings i ON i.id = 1
      JOIN school_cycles sc ON sc.id = COALESCE(ss.school_cycle_id, g.active_cycle_id, i.active_cycle_id, e.cycle_id)
      JOIN students st ON st.id = ss.student_id AND st.is_active = 1
-     WHERE ss.status = 'pending' AND ss.status_manual_override = 0`
+     WHERE ss.status = 'pending' AND ss.status_manual_override = 0
+       ${studentId == null ? '' : 'AND ss.student_id = ?'}`,
+    ...(studentId == null ? [] : [studentId])
   );
+  if (!pending.length) return 0;
   const automaticEvents = all<{ school_cycle_id: number | null; start_date: string }>(
     `SELECT school_cycle_id, start_date FROM academic_calendar_events
      WHERE is_active = 1 AND auto_start_subjects = 1
