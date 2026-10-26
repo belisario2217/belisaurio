@@ -60,7 +60,7 @@ export function provisionStudentAccount(input: StudentAccountInput): StudentAcco
     throw new ApiError(409, `El correo institucional ${email} ya pertenece a otra cuenta.`);
   }
 
-  run("UPDATE students SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", email, input.studentId);
+  run("UPDATE students SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND email IS NOT ?", email, input.studentId, email);
   if (existing) {
     run(
       `UPDATE users SET full_name = ?, email = ?, role_id = ?, is_active = 1,
@@ -68,8 +68,11 @@ export function provisionStudentAccount(input: StudentAccountInput): StudentAcco
          WHEN password_must_change = 1 AND temporary_password_name IS NULL THEN ?
          ELSE temporary_password_name
        END,
-       updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      fullName(input), email, role.id, firstGivenName(input.firstName).toLocaleLowerCase("es-MX"), existing.id
+       updated_at = CURRENT_TIMESTAMP WHERE id = ?
+       AND (full_name IS NOT ? OR email IS NOT ? OR role_id IS NOT ? OR is_active <> 1
+         OR (password_must_change = 1 AND temporary_password_name IS NULL))`,
+      fullName(input), email, role.id, firstGivenName(input.firstName).toLocaleLowerCase("es-MX"), existing.id,
+      fullName(input), email, role.id
     );
     return { userId: existing.id, email, temporaryPassword: null, created: false };
   }

@@ -1,4 +1,4 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import path from "node:path";
 import { get } from "../db.js";
 import { institutionLogoFile } from "./institution-logo.js";

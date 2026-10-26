@@ -1,6 +1,5 @@
 ﻿import { Router } from "express";
 import multer from "multer";
-import ExcelJS from "exceljs";
 import { documentBranding, workbookInstitutionLogo } from "../services/document-branding.js";
 import { fileURLToPath } from "node:url";
 import { actaOptions, previewActa, type GradeImportRow, type ImportError } from "../services/grade-acta.js";
@@ -475,6 +474,7 @@ gradesRouter.get("/import/options", requirePermission("grades.import"), (req: Au
 });
 
 gradesRouter.get("/template/import.xlsx", requirePermission("grades.import"), async (_req, res) => {
+  const {default: ExcelJS} = await import("exceljs");
   const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(fileURLToPath(new URL("../templates/acta-calificaciones.xlsx",import.meta.url)));
   const brand=documentBranding(),image=workbookInstitutionLogo(workbook);workbook.creator=brand.name;
   for(const sheet of workbook.worksheets){const title=String(sheet.getCell("A1").value??sheet.name);sheet.getCell("A1").value=`${brand.name}\n${brand.campus}\n${title}`;sheet.getCell("A1").font={name:"Arial",size:13,bold:true,color:{argb:"FF172951"}};sheet.getCell("A1").alignment={horizontal:"center",vertical:"middle",wrapText:true};sheet.getRow(1).height=90;
