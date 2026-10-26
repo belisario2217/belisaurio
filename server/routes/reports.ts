@@ -2,7 +2,6 @@ import { Router } from "express";
 import { logActivity, requirePermission, type AuthenticatedRequest } from "../auth.js";
 import { all, get, run, transaction } from "../db.js";
 import { createPdf, pdfTable, sendWorkbook } from "../services/files.js";
-import { sendAttendancePdf, sendAttendanceWorkbook } from "../services/attendance-list.js";
 import { syncGroupSubjects } from "../services/group-subjects.js";
 import { getCycleCalendar, syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
 import { sendStudyCertificate } from "../services/study-certificate.js";
@@ -626,16 +625,6 @@ const reportDefinitions = {
       WHERE (? IS NULL OR e.group_id = ?) ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
     headers: ["Matricula", "Alumno", "Grupo", "Programa", "Turno", "Estatus"]
   },
-  attendance: {
-    title: "Lista de asistencia",
-    query: `SELECT st.student_number AS Matricula,
-      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name, '')) AS Alumno,
-      g.name AS Grupo, '' AS Asistencia, '' AS Observaciones
-      FROM students st JOIN enrollments e ON e.student_id = st.id AND e.is_active = 1
-      JOIN groups g ON g.id = e.group_id WHERE (? IS NULL OR e.group_id = ?)
-      ORDER BY spanish_sort(g.name), spanish_sort(st.last_name), spanish_sort(COALESCE(st.second_last_name, '')), spanish_sort(st.first_name)`,
-    headers: ["Matricula", "Alumno", "Grupo", "Asistencia", "Observaciones"]
-  },
   gradebook: {
     title: "Concentrado de calificaciones",
     query: `SELECT st.student_number AS Matricula,
@@ -696,14 +685,6 @@ reportsRouter.get("/data/:type", requirePermission("reports.view"), async (req, 
   const definition = reportDefinitions[req.params.type as keyof typeof reportDefinitions];
   if (!definition) throw new ApiError(404, "El reporte solicitado no existe.");
   const groupId = req.query.groupId ? Number(req.query.groupId) : null;
-  if (req.params.type === "attendance") {
-    if (req.query.format === "xlsx") {
-      await sendAttendanceWorkbook(res, groupId, req.query.mode, req.query.month);
-      return;
-    }
-    sendAttendancePdf(res, groupId, req.query.mode, req.query.month);
-    return;
-  }
   const records = all<any>(definition.query, groupId, groupId)
     .map(row => typeof row.Programa === "string" ? { ...row, Programa: displayProgramName(row.Programa) } : row);
   if (req.query.format === "xlsx") return sendWorkbook(res, `${req.params.type}.xlsx`, "Reporte", records);

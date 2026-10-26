@@ -5,7 +5,6 @@ import { buildBilling } from "../services/billing.js";
 import { ApiError } from "../utils.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import { syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
-import { studentAttendanceMonths } from "../services/daily-attendance.js";
 import { createPdf } from "../services/files.js";
 import { getAcademicStudent, type AcademicSubject } from "../services/academic-record.js";
 import { drawAcademicDocument, printedSubjects, publicAcademicStudent } from "../services/academic-documents.js";
@@ -206,7 +205,6 @@ export function studentPortalData(studentId: number) {
     enrollment.student_id,
     enrollment.group_id
   );
-  const attendance = studentAttendanceMonths(enrollment.enrollment_id);
   const manualRegistration = get<{ status: string; paid_at: string | null; period_number: number }>(
     "SELECT status, paid_at, period_number FROM student_registration_status WHERE enrollment_id = ? AND period_number = ?",
     enrollment.enrollment_id,
@@ -285,7 +283,6 @@ export function studentPortalData(studentId: number) {
     }),
     registration: registration ?? { paid: 0, paid_at: null, concept: null },
     promotion: promotionEligibility(enrollment.enrollment_id),
-    attendance,
     messages,
     subjects,
     activeSubjects,

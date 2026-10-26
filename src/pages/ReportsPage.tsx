@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Award, Check, ClipboardCheck, FileSpreadsheet, FileText, GraduationCap, ListFilter, Printer,
+  Award, Check, FileSpreadsheet, FileText, GraduationCap, ListFilter, Printer,
   Save, Sheet, ShieldCheck, SlidersHorizontal, Trash2, UserRoundX, UsersRound
 } from "lucide-react";
 import { api, download, openDocument } from "../lib/api";
@@ -40,7 +40,6 @@ type CurricularDraft = {
 
 const reports = [
   { type: "students", title: "Lista general de alumnos", description: "Directorio limpio por grupo con campos seleccionables.", icon: UsersRound },
-  { type: "attendance", title: "Lista de asistencia", description: "Una lista por grupo para registrar cada día, válida para todas las materias.", icon: ClipboardCheck },
   { type: "gradebook", title: "Concentrado de calificaciones", description: "Resultados por alumno, materia y periodo.", icon: Sheet },
   { type: "subjects", title: "Reporte por materia", description: "Promedio, evaluaciones e indice de reprobacion.", icon: FileText },
   { type: "teachers", title: "Reporte por docente", description: "Materias, grupos asignados y promedio general.", icon: GraduationCap },
@@ -83,11 +82,6 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   const [initialStatus, setInitialStatus] = useState<CurricularSubject["status"]>("in_progress");
   const [busy, setBusy] = useState(false);
   const [savingAll, setSavingAll] = useState(false);
-  const [attendanceMode, setAttendanceMode] = useState("escolarizado");
-  const [attendanceMonth, setAttendanceMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
   const [studentListOpen, setStudentListOpen] = useState(false);
   const [selectedStudentFields, setSelectedStudentFields] = useState<string[]>(defaultStudentListFields);
 
@@ -217,10 +211,6 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   function reportPath(type: string, format: string) {
     const query = new URLSearchParams({ format });
     if (groupId) query.set("groupId", groupId);
-    if (type === "attendance") {
-      query.set("mode", attendanceMode);
-      query.set("month", attendanceMonth);
-    }
     return `/reports/data/${type}?${query}`;
   }
 
@@ -372,8 +362,8 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
     student.name.toLocaleLowerCase("es-MX").includes(normalizedStudentSearch) || String(student.id) === studentId);
   const semesterSubjects = planSubjects.filter((subject) => String(subject.recommended_period) === semester);
   const changedRowsCount = curricularRows.filter((row) => isDraftChanged(row)).length;
-  const listReports = reports.filter((report) => report.type === "students" || report.type === "attendance");
-  const academicReports = reports.filter((report) => report.type !== "students" && report.type !== "attendance");
+  const listReports = reports.filter((report) => report.type === "students");
+  const academicReports = reports.filter((report) => report.type !== "students");
 
   function renderReportItem(report: (typeof reports)[number]) {
     return (
@@ -381,10 +371,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
         <div className="report-item-icon"><report.icon size={23} /></div>
         <div>
           <h3>{report.title}</h3><p>{report.description}</p>
-          {report.type === "attendance" && <div className="attendance-report-options">
-            <label>Modalidad<select value={attendanceMode} onChange={(event) => setAttendanceMode(event.target.value)}><option value="escolarizado">Escolarizado</option><option value="semiescolarizado">Semiescolarizado</option><option value="complementario">Complementario</option><option value="en_linea">En Línea</option></select></label>
-            <label>Mes<input type="month" value={attendanceMonth} onChange={(event) => setAttendanceMonth(event.target.value)} /></label>
-          </div>}
+
         </div>
         <div className="report-actions">
           {report.type === "students" ? <>
@@ -483,7 +470,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
 
       <section className="reports-section">
         <div className="section-heading standalone">
-          <div><span>Listas operativas</span><h2>Listas y controles</h2><p>Formatos rápidos para consulta, asistencia y trabajo diario.</p></div>
+          <div><span>Listas operativas</span><h2>Listas y controles</h2><p>Formatos rápidos para consulta y trabajo diario.</p></div>
           <Field label="Filtrar por grupo"><Select options={options.groups ?? []} value={groupId} onChange={(event) => selectGroup(event.target.value)} placeholder="Todos los grupos" /></Field>
         </div>
         <div className="report-grid">{listReports.map(renderReportItem)}</div>

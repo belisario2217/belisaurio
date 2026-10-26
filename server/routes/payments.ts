@@ -11,7 +11,7 @@ import {
   type StatementInstitutionSettings
 } from "../services/account-statement.js";
 import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../utils.js";
-import { normalizePhysicalFolio, comparePhysicalFolios } from "../services/physical-folio.js";
+import { normalizePhysicalFolio } from "../services/physical-folio.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import multer from "multer";
 import { issueDocument } from "../services/document-verification.js";
@@ -438,7 +438,7 @@ function deletePaymentRecord(id: number, req: AuthenticatedRequest) {
       "SELECT student_id,billing_month FROM student_tuition_charges WHERE payment_id = ?", id);
     const registrations = all("SELECT * FROM student_registration_status WHERE payment_id = ?", id);
     unlinkTuitionChargePayment(id);
-    // ON DELETE SET NULL alone leaves a paid manual receipt that reappears in Folios.
+    // ON DELETE SET NULL alone leaves a paid manual registration after its receipt is removed.
     run("DELETE FROM student_registration_status WHERE payment_id = ?", id);
     run("DELETE FROM student_payments WHERE id = ?", id);
     for (const charge of charges) {
@@ -481,72 +481,9 @@ function reportRows(month: string, groupId?: number) {
   );
 }
 
-type RegisteredPhysicalFolio = {
-  id: number; physical_folio: string; paid_at: string; concept: string;
-  amount: number; payment_method: string | null; internal_folio: string | null;
-  student_id: number; student_number: string; student_name: string;
-  group_name: string | null; source: string;
-};
-function registeredPhysicalFolios() {
-  // Listado consolidado: los registros manuales con pago asociado ya están en student_payments.
-  const recorded = all<RegisteredPhysicalFolio>(`
-    SELECT sp.id,sp.notes AS physical_folio,sp.paid_at,sp.concept,sp.amount,sp.payment_method,
-      sp.folio AS internal_folio,st.id AS student_id,st.student_number,
-      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name,'')) AS student_name,
-      g.name AS group_name,'payment' AS source
-    FROM student_payments sp
-    JOIN students st ON st.id=sp.student_id
-    LEFT JOIN enrollments e ON e.id=sp.enrollment_id
-    LEFT JOIN groups g ON g.id=e.group_id
-    WHERE sp.notes IS NOT NULL AND TRIM(sp.notes)<>''
-    UNION ALL
-    SELECT -srs.id AS id,srs.physical_folio,srs.paid_at,
-      CASE WHEN srs.period_number=1 THEN 'Inscripción manual'
-        ELSE 'Reinscripción manual' END AS concept,srs.amount,
-      'Registro manual en Alumnos' AS payment_method,NULL AS internal_folio,
-      st.id AS student_id,st.student_number,
-      TRIM(st.first_name || ' ' || st.last_name || ' ' || COALESCE(st.second_last_name,'')) AS student_name,
-      g.name AS group_name,'registration' AS source
-    FROM student_registration_status srs
-    JOIN enrollments e ON e.id=srs.enrollment_id
-    JOIN students st ON st.id=e.student_id
-    LEFT JOIN groups g ON g.id=e.group_id
-    WHERE srs.status='paid' AND srs.payment_id IS NULL
-      AND srs.physical_folio IS NOT NULL AND TRIM(srs.physical_folio)<>''
-  `);
-  return recorded.filter(row => /^\d+$/.test(String(row.physical_folio ?? "")) && /[1-9]/.test(row.physical_folio))
-    .map(row => ({...row,physical_folio:normalizePhysicalFolio(row.physical_folio)}))
-    .sort((a,b)=>comparePhysicalFolios(a.physical_folio,b.physical_folio) || a.paid_at.localeCompare(b.paid_at) || a.id-b.id);
-}
-paymentsRouter.get("/folios", requirePermission("payments.view"), (_req, res) => {
-  const folios = registeredPhysicalFolios();
-  res.json({total:folios.length,folios});
-});
-paymentsRouter.get("/folios/export", requirePermission("payments.export"), (_req, res) => {
-  const rows=registeredPhysicalFolios().map(row => ({
-    "Folio físico":row.physical_folio,"Fecha":row.paid_at,"Matrícula":row.student_number,
-    "Alumno":row.student_name,"Grupo":row.group_name??"","Concepto":row.concept,
-    "Método":row.payment_method??"","Monto":row.amount,"Folio interno":row.internal_folio??""
-  }));
-  const headers=Object.keys(rows[0]??{"Folio físico":"","Fecha":"","Matrícula":"","Alumno":"","Grupo":"","Concepto":"","Método":"","Monto":"","Folio interno":""});
-  sendCsv(res,"folios-de-pago.csv",headers,rows.map(row=>headers.map(header=>row[header as keyof typeof row])));
-});
-paymentsRouter.delete("/folios/:source/:id", requirePermission("payments.manage"), (req: AuthenticatedRequest, res) => {
-  const id = asId(req.params.id, "Registro de folio");
-  if (req.params.source === "payment") {
-    deletePaymentRecord(id, req);
-  } else if (req.params.source === "registration") {
-    transaction(() => {
-      const registration = get<{payment_id:number|null;status:string}>("SELECT * FROM student_registration_status WHERE id = ?", id);
-      if (!registration) throw new ApiError(404, "El registro de folio ya no existe.");
-      if (registration.payment_id || registration.status !== "paid") throw new ApiError(409, "El registro cambió. Actualiza los folios antes de eliminarlo.");
-      run("DELETE FROM student_registration_status WHERE id = ?", id);
-      logActivity(req, "delete", "student_registration_status", id, registration);
-    });
-  } else {
-    throw new ApiError(400, "El tipo de registro de folio no es válido.");
-  }
-  res.status(204).end();
+// Retired URLs must never resolve as payment IDs or mutate existing receipts.
+paymentsRouter.use("/folios", (_req, res) => {
+  res.status(410).json({ message: "La sección de folios fue retirada. Consulta los pagos en Cobros." });
 });
 
 paymentsRouter.get("/students", requirePermission("payments.view"), (req, res) => {

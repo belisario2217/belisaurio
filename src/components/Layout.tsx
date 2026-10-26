@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3, BookOpenCheck, ChevronLeft, ChevronRight, FileBarChart, GraduationCap,
-  LayoutDashboard, LogOut, Menu, Search, Sparkles, Settings, ShieldCheck, SlidersHorizontal, UsersRound, X, BookCopy, CircleGauge, ReceiptText, Megaphone, TableProperties, School, CalendarCheck, IdCard
+  LayoutDashboard, LogOut, Menu, Search, Sparkles, Settings, ShieldCheck, SlidersHorizontal, UsersRound, X, BookCopy, CircleGauge, ReceiptText, Megaphone, TableProperties, School, IdCard
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/api";
@@ -16,9 +16,7 @@ const navItems = [
   { to: "/alumnos", label: "Alumnos", icon: GraduationCap, permission: "students.view" },
   { to: "/grupos", label: "Administración de grupos", icon: School, permission: "students.view" },
   { to: "/calificaciones", label: "Calificaciones", icon: BookOpenCheck, permission: "grades.view" },
-  { to: "/asistencia", label: "Asistencia", icon: CalendarCheck, permission: "attendance.view" },
   { to: "/cobros", label: "Cobros", icon: ReceiptText, permission: "payments.view" },
-  { to: "/folios", label: "Folios", icon: BookCopy, permission: "payments.view" },
   { to: "/colegiaturas-mensuales", label: "Colegiaturas mensuales", icon: TableProperties, permission: "tuition.manage" },
   { to: "/mensajes-admin", label: "Mensajes", icon: Megaphone, permission: "messages.view" },
   { to: "/analiticas", label: "Analíticas", icon: BarChart3, permission: "analytics.view" },
@@ -33,7 +31,6 @@ const navItems = [
   { to: "/mi-avance", label: "Mi avance", icon: CircleGauge, permission: "portal.view", studentOnly: true },
   { to: "/mis-calificaciones", label: "Mis calificaciones", icon: BookOpenCheck, permission: "portal.view", studentOnly: true },
   { to: "/mis-pagos", label: "Mis pagos", icon: ReceiptText, permission: "portal.view", studentOnly: true },
-  { to: "/mi-asistencia", label: "Mi asistencia", icon: CalendarCheck, permission: "portal.view", studentOnly: true },
   { to: "/mi-credencial", label: "Mi credencial", icon: IdCard, permission: "portal.view", studentOnly: true },
   { to: "/mensajes", label: "Mensajes importantes", icon: Megaphone, permission: "portal.view", studentOnly: true },
   { to: "/usuarios", label: "Usuarios y roles", icon: UsersRound, permission: "users.manage" },
@@ -45,9 +42,7 @@ const titles: Record<string, string> = {
   "/alumnos": "Gestión de alumnos",
   "/grupos": "Administración de grupos",
   "/calificaciones": "Captura de calificaciones",
-  "/asistencia": "Asistencia diaria",
   "/cobros": "Registro de cobros",
-  "/folios": "Folios de pago",
   "/colegiaturas-mensuales": "Colegiaturas mensuales",
   "/mensajes-admin": "Mensajes importantes",
   "/analiticas": "Analíticas académicas",
@@ -62,7 +57,6 @@ const titles: Record<string, string> = {
   "/mi-avance": "Mi avance curricular",
   "/mis-calificaciones": "Mis calificaciones",
   "/mis-pagos": "Mis pagos",
-  "/mi-asistencia": "Mi asistencia",
   "/mi-credencial": "Mi credencial",
   "/mensajes": "Mensajes importantes",
   "/usuarios": "Usuarios y roles",
@@ -71,8 +65,8 @@ const titles: Record<string, string> = {
 
 const sections = [
   { name: "Inicio", paths: ["/"] },
-  { name: "Control académico", paths: ["/alumnos", "/grupos", "/calificaciones", "/asistencia", "/mi-avance", "/mis-calificaciones", "/mi-asistencia"] },
-  { name: "Finanzas", paths: ["/cobros", "/folios", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"] },
+  { name: "Control académico", paths: ["/alumnos", "/grupos", "/calificaciones", "/mi-avance", "/mis-calificaciones"] },
+  { name: "Finanzas", paths: ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"] },
   { name: "Información y documentos", paths: ["/reportes", "/documentos", "/credenciales", "/mi-credencial", "/analiticas", "/asistente-importacion"] },
   { name: "Comunicación", paths: ["/mensajes-admin", "/mensajes"] },
   { name: "Administración", paths: ["/catalogos", "/planes", "/usuarios", "/configuracion"] }
@@ -96,7 +90,7 @@ export function Layout({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => { setSearchError(""); api<typeof results>(`/improvements/search?q=${encodeURIComponent(search.trim())}`, { signal: controller.signal }).then(setResults).catch(error => { if (!controller.signal.aborted) setSearchError(error.message); }); }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [search, searchOpen]);
-  const section = ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"].includes(location.pathname) ? "finance" : ["/mensajes", "/mensajes-admin"].includes(location.pathname) ? "community" : /^\/(alumnos|grupos|calificaciones|asistencia|planes|mi-avance|mis-calificaciones|mi-asistencia|reportes|documentos)/.test(location.pathname) ? "academic" : "general";
+  const section = ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"].includes(location.pathname) ? "finance" : ["/mensajes", "/mensajes-admin"].includes(location.pathname) ? "community" : /^\/(alumnos|grupos|calificaciones|planes|mi-avance|mis-calificaciones|reportes|documentos)/.test(location.pathname) ? "academic" : "general";
   const allowed = (item: typeof navItems[number]) => (!item.permission || (item.permission === "import" ? can("students.import") || can("grades.import") : can(item.permission))) && (!("studentOnly" in item) || !item.studentOnly || Boolean(user?.studentId));
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);

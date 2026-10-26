@@ -46,7 +46,6 @@ type RosterRow = {
   partial_3: number | null;
   eligibility: {
     eligible: boolean;
-    attendancePercentage: number;
     registrationPaid: boolean;
     reasons: string[];
   };
