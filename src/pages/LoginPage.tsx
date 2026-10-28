@@ -43,7 +43,7 @@ export function LoginPage() {
         <div>
           <span className="identity-kicker">Sistema de gestión académica</span>
           <h1>{branding.institution_name}</h1>
-          <p>Frontera, Centla.</p>
+          <p>Tabasco</p>
         </div>
         <div className="identity-lines" aria-hidden="true"><i /><i /><i /></div>
       </section>
