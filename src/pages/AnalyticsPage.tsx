@@ -1,3 +1,4 @@
+import { useReducedMotion } from "../lib/useReducedMotion";
 import { useEffect, useState } from "react";
 import { BarChart3, Filter, Medal, TrendingDown } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ type Analytics = {
 };
 
 export function AnalyticsPage() {
+  const reducedMotion = useReducedMotion();
   const [data, setData] = useState<Analytics | null>(null);
   const [options, setOptions] = useState<Record<string, Option[]>>({});
   const [filters, setFilters] = useState({ programId: "", shiftId: "", groupId: "", periodId: "", cycleId: "" });
@@ -70,8 +72,8 @@ export function AnalyticsPage() {
                 <CartesianGrid stroke="#e6edf3" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} />
+                <Tooltip isAnimationActive={!reducedMotion} />
+                <Bar isAnimationActive={!reducedMotion} dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -84,8 +86,8 @@ export function AnalyticsPage() {
                 <CartesianGrid stroke="#e6edf3" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Line dataKey="average" stroke="#087b88" strokeWidth={3} dot={{ fill: "#087b88", r: 4 }} />
+                <Tooltip isAnimationActive={!reducedMotion} />
+                <Line isAnimationActive={!reducedMotion} dataKey="average" stroke="#087b88" strokeWidth={3} dot={{ fill: "#087b88", r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -98,8 +100,8 @@ export function AnalyticsPage() {
                 <CartesianGrid stroke="#e6edf3" horizontal={false} />
                 <XAxis type="number" domain={[0, 100]} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={110} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="failure_rate" radius={[0, 3, 3, 0]}>
+                <Tooltip isAnimationActive={!reducedMotion} />
+                <Bar isAnimationActive={!reducedMotion} dataKey="failure_rate" radius={[0, 3, 3, 0]}>
                   {(data?.subjectAverages ?? []).map((entry) => <Cell key={entry.id} fill={entry.failure_rate >= 30 ? "#c2384b" : "#e0a62f"} />)}
                 </Bar>
               </BarChart>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3, BookOpenCheck, ChevronLeft, ChevronRight, FileBarChart, GraduationCap,
@@ -64,12 +64,12 @@ const titles: Record<string, string> = {
 };
 
 const sections = [
-  { name: "Inicio", paths: ["/"] },
-  { name: "Control académico", paths: ["/alumnos", "/grupos", "/calificaciones", "/mi-avance", "/mis-calificaciones"] },
-  { name: "Finanzas", paths: ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"] },
-  { name: "Información y documentos", paths: ["/reportes", "/documentos", "/credenciales", "/mi-credencial", "/analiticas", "/asistente-importacion"] },
-  { name: "Comunicación", paths: ["/mensajes-admin", "/mensajes"] },
-  { name: "Administración", paths: ["/catalogos", "/planes", "/usuarios", "/configuracion"] }
+  { name: "Mi espacio", area: "general", paths: ["/", "/mi-avance", "/mis-calificaciones", "/mis-pagos", "/mi-credencial"] },
+  { name: "Gestión académica", area: "academic", paths: ["/alumnos", "/grupos", "/planes", "/calificaciones"] },
+  { name: "Servicios escolares", area: "campus", paths: ["/documentos", "/credenciales", "/asistente-importacion"] },
+  { name: "Finanzas", area: "finance", paths: ["/balance", "/cobros", "/colegiaturas-mensuales", "/nomina"] },
+  { name: "Información y comunidad", area: "community", paths: ["/mensajes-admin", "/mensajes", "/reportes", "/analiticas"] },
+  { name: "Configuración", area: "settings", paths: ["/catalogos", "/usuarios", "/configuracion"] }
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -90,10 +90,21 @@ export function Layout({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => { setSearchError(""); api<typeof results>(`/improvements/search?q=${encodeURIComponent(search.trim())}`, { signal: controller.signal }).then(setResults).catch(error => { if (!controller.signal.aborted) setSearchError(error.message); }); }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [search, searchOpen]);
-  const section = ["/cobros", "/colegiaturas-mensuales", "/balance", "/nomina", "/mis-pagos"].includes(location.pathname) ? "finance" : ["/mensajes", "/mensajes-admin"].includes(location.pathname) ? "community" : /^\/(alumnos|grupos|calificaciones|planes|mi-avance|mis-calificaciones|reportes|documentos)/.test(location.pathname) ? "academic" : "general";
+  const currentSection = sections.find(group => group.paths.some(path => path === location.pathname || (path !== "/" && location.pathname.startsWith(path + "/")))) ?? sections[0];
+  const section = location.pathname === "/mis-pagos" ? "finance" : ["/mi-avance", "/mis-calificaciones"].includes(location.pathname) ? "academic" : location.pathname === "/mi-credencial" ? "campus" : currentSection.area;
   const allowed = (item: typeof navItems[number]) => (!item.permission || (item.permission === "import" ? can("students.import") || can("grades.import") : can(item.permission))) && (!("studentOnly" in item) || !item.studentOnly || Boolean(user?.studentId));
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  function closeMobileMenu() { setMobileOpen(false); menuButton.current?.focus(); }
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setMobileOpen(false); menuButton.current?.focus(); } };
+    document.addEventListener("keydown", close);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", close); };
+  }, [mobileOpen]);
   const [institution, setInstitution] = useState<Institution | null>(null);
 
   useEffect(() => {
@@ -102,19 +113,26 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
   return (
-    <div data-section={section} className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
-      {mobileOpen && <button className="mobile-overlay" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú" />}
-      <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
+    <div data-section={section} className={`app-shell liquid-campus ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <a className="campus-skip-link" href="#campus-main">Saltar al contenido</a>
+      {mobileOpen && <button className="mobile-overlay" onClick={closeMobileMenu} aria-label="Cerrar menú" />}
+      <aside id="campus-navigation" className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <div className="brand">
           <InstitutionLogo logoPath={institution?.logo_path} />
           <div className="brand-copy">
             <strong>{institution?.institution_name || "Universidad IFOP"}</strong>
             <span>Gestión académica</span>
           </div>
-          <button className="icon-button sidebar-mobile-close" onClick={() => setMobileOpen(false)} aria-label="Cerrar menú"><X size={19} /></button>
+          <button className="icon-button sidebar-mobile-close" onClick={closeMobileMenu} aria-label="Cerrar menú"><X size={19} /></button>
         </div>
-        <nav className="main-nav">
-          {sections.map(section => { const items = navItems.filter(item => section.paths.includes(item.to) && allowed(item)); return items.length ? <div className="nav-category" key={section.name}><span className="nav-section-label">{section.name}</span>{items.map(item => <NavLink key={item.to} to={item.to} end={item.to === "/"} title={collapsed ? item.label : undefined}><item.icon size={19} strokeWidth={1.8}/><span>{item.label}</span></NavLink>)}</div> : null; })}
+        <nav className="main-nav" aria-label="Secciones de la plataforma">
+          {sections.map(group => {
+            const items = group.paths.flatMap(path => navItems.filter(item => item.to === path && allowed(item)));
+            return items.length ? <div className="nav-category" data-area={group.area} key={group.name}>
+              <span className="nav-section-label">{group.name}</span>
+              {items.map(item => <NavLink key={item.to} to={item.to} end={item.to === "/"} title={item.label} aria-label={item.label}><item.icon size={19} strokeWidth={1.8}/><span>{item.label}</span></NavLink>)}
+            </div> : null;
+          })}
         </nav>
         <div className="sidebar-footer">
           <div className="cycle-chip">
@@ -130,10 +148,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-title">
-            <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Abrir menú"><Menu size={20} /></button>
+            <button ref={menuButton} className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Abrir menú" aria-expanded={mobileOpen} aria-controls="campus-navigation"><Menu size={20} /></button>
             <div>
-              <span>{new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}</span>
-              <h1>{titles[location.pathname] || "Universidad IFOP"}</h1>
+              <span className="topbar-eyebrow"><b>{currentSection.name}</b><i aria-hidden="true" />{new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}</span>
+              <h1>{titles[location.pathname] || (location.pathname.startsWith("/alumnos/") ? "Expediente del alumno" : "Universidad IFOP")}</h1>
             </div>
           </div>
           <div className="account">
@@ -143,7 +161,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <button className="icon-button" onClick={logout} aria-label="Cerrar sesión" title="Cerrar sesión"><LogOut size={18} /></button>
           </div>
         </header>
-        <main className="content">{children}</main>
+        <main id="campus-main" className="content" tabIndex={-1}>{children}</main>
       </div>
       <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title="Buscar alumnos">
         <div className="page-stack"><label className="search-box"><Search size={18}/><input autoFocus placeholder="Nombre o matrícula (mínimo 2 letras)" value={search} onChange={event => setSearch(event.target.value)}/></label>

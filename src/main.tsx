@@ -7,6 +7,7 @@ import { ToastProvider } from "./components/Toast";
 import "./styles.css";
 import "./visual-theme.css";
 import "./ifop-enhancements.css";
+import "./campus-glass.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

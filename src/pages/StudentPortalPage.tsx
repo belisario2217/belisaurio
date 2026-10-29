@@ -133,6 +133,20 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
     .filter((semester): semester is number => semester != null))].sort((a, b) => a - b);
   const subjects = data.gradeSubjects.filter(subject => subject.recommended_period === selectedSemester);
 
+  const needsPassword = Boolean(user?.passwordMustChange && !passwordUpdated);
+  const passwordNotice = (
+    <section className="toolbar">
+      <div className="toolbar-primary">
+        <KeyRound size={20} />
+        <div>
+          <strong>{needsPassword ? "Cambia tu contraseña temporal" : "Seguridad de tu cuenta"}</strong>
+          <span className="table-sub">Usa una contraseña personal de al menos 8 caracteres.</span>
+        </div>
+      </div>
+      <Button variant={needsPassword ? "primary" : "secondary"} icon={<KeyRound size={17} />} onClick={() => setPasswordOpen(true)}>Cambiar contraseña</Button>
+    </section>
+  );
+
   return (
     <div className="student-portal page-stack">
       <section className="student-welcome">
@@ -150,18 +164,9 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
       </section>
 
       {view === "overview" && <>
-      <Link className="cred-portal-link" to="/mi-credencial"><IdCard size={28} /><div><strong>Mi credencial</strong><span>Consulta su activación, vigencia y descarga tu credencial estudiantil.</span></div><ArrowRight size={19} /></Link>
+      {needsPassword && passwordNotice}
 
-      <section className="toolbar">
-        <div className="toolbar-primary">
-          <KeyRound size={20} />
-          <div>
-            <strong>{user?.passwordMustChange && !passwordUpdated ? "Cambia tu contraseña temporal" : "Seguridad de tu cuenta"}</strong>
-            <span className="table-sub">Usa una contraseña personal de al menos 8 caracteres.</span>
-          </div>
-        </div>
-        <Button variant={user?.passwordMustChange && !passwordUpdated ? "primary" : "secondary"} icon={<KeyRound size={17} />} onClick={() => setPasswordOpen(true)}>Cambiar contraseña</Button>
-      </section>
+
 
       <section className="portal-metrics">
         <div><CircleGauge size={22} /><span>Avance curricular</span><strong>{progress.percentage}%</strong></div>
@@ -179,10 +184,13 @@ export function StudentPortalPage({ view = "overview" }: { view?: "overview" | "
         <footer><span>0%</span><span>{progress.percentage}% completado</span><span>100%</span></footer>
       </section>
 
+      <Link className="cred-portal-link" to="/mi-credencial"><IdCard size={28} /><div><strong>Mi credencial</strong><span>Consulta su activación, vigencia y descarga tu credencial estudiantil.</span></div><ArrowRight size={19} /></Link>
+
       <div className="portal-section-links">
         <Link to="/mis-calificaciones"><BookOpenCheck size={22} /><strong>Mis calificaciones</strong><span>Calificaciones por semestre y boleta del alumno</span><ArrowRight size={18} /></Link>
         <Link to="/mis-pagos"><ReceiptText size={22} /><strong>Mis pagos</strong><span>Colegiaturas e historial de pagos</span><ArrowRight size={18} /></Link>
       </div>
+      {!needsPassword && passwordNotice}
       </>}
 
       {view === "payments" && <>
