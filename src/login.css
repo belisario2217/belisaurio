@@ -1,0 +1,112 @@
+.ifop-login {
+  --login-navy: #172951;
+  --login-blue: #315bd6;
+  --login-sky: #adc6f6;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: 1.08fr 1fr;
+  background: #f6f8fe;
+  color: var(--login-navy);
+}
+.ifop-login-story {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 58px;
+  padding: clamp(32px, 4vw, 64px);
+  color: #fff;
+  background: radial-gradient(ellipse at 2% 100%, #365bb3 0, transparent 53%), linear-gradient(145deg, #142446, #203766 58%, #284c93);
+}
+.ifop-login-grain { position: absolute; inset: 0; z-index: -1; opacity: .15; background-image: radial-gradient(#bfd1fa 1px, transparent 1px); background-size: 25px 25px; mask-image: linear-gradient(160deg, transparent 22%, #000); }
+.ifop-login-brand { display: flex; align-items: center; gap: 17px; position: relative; z-index: 1; }
+.ifop-login-logo { width: 68px; height: 68px; flex: 0 0 68px; overflow: hidden; border-radius: 18px; background: #fff; box-shadow: 0 8px 25px #07183433; }
+.ifop-login-logo img { display: block; width: 100%; height: 100%; object-fit: contain; transform: scale(1.055); }
+.ifop-login-brand strong { display: block; font: 700 clamp(17px, 1.5vw, 23px)/1.35 Manrope, sans-serif; overflow-wrap: anywhere; }
+.ifop-login-brand span { display: block; margin-top: 5px; color: #bed0f3; font-size: 12px; letter-spacing: .035em; }
+.ifop-login-message { position: relative; z-index: 1; margin: auto 0; padding: 8px 0 18px; animation: ifop-login-enter .8s .08s both; }
+.ifop-login-eyebrow { display: flex; align-items: center; gap: 10px; color: #b4cdf9; font-size: 10px; font-weight: 700; letter-spacing: .17em; }
+.ifop-login-eyebrow > span { width: 24px; height: 2px; background: #a5c6ff; }
+.ifop-login-message h1 { position: relative; margin: 25px 0 24px; font: 700 clamp(47px, 5.1vw, 82px)/1.12 Manrope, sans-serif; letter-spacing: -.055em; }
+.ifop-login-message h1 em { color: #b9d0ff; font-style: normal; }
+.ifop-login-message > p { max-width: 330px; color: #c1d0ec; font-size: 15px; line-height: 1.85; }
+.ifop-login-community { display: flex; align-items: center; gap: 13px; margin-top: 36px; }
+.ifop-login-community-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border: 1px solid #a5bff344; border-radius: 14px; color: #c1d6ff; background: #b0caff0c; }
+.ifop-login-community strong, .ifop-login-community div > span { display: block; }
+.ifop-login-community strong { font-size: 12px; font-weight: 600; }
+.ifop-login-community div > span { color: #b6c9ee; margin-top: 5px; font-size: 10px; }
+.ifop-login-story-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding-top: 24px; border-top: 1px solid #b9d0ff26; }
+.ifop-login-story-footer > span { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; color: #b7caed; }
+.ifop-login-orbit { position: absolute; z-index: -1; width: min(90%, 650px); right: -37%; top: 28%; opacity: .85; animation: ifop-login-orbit 18s ease-in-out infinite alternate; pointer-events: none; }
+.ifop-login-access { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 30px; min-width: 0; padding: 46px 32px 28px; background: radial-gradient(ellipse at 100% 0, #dfE8fd 0, transparent 60%), #f7f9fe; }
+.ifop-login-access-label { display: inline-flex; align-items: center; gap: 8px; color: #596d93; font-size: 9px; letter-spacing: .19em; font-weight: 700; }
+.ifop-login-access-label > span { width: 6px; height: 6px; border-radius: 50%; background: #567edb; box-shadow: 0 0 0 4px #567edb12; }
+.ifop-login-card { width: min(100%, 432px); position: relative; border: 1px solid #dde5f4; border-radius: 26px; padding: 36px; background: #ffffff; box-shadow: 0 20px 65px -24px #233f7c2e, 0 2px 8px #233f7c03; animation: ifop-login-enter .75s .15s both; }
+.ifop-login-card::before { content: ""; position: absolute; height: 3px; top: -1px; left: 36px; right: 36px; background: linear-gradient(90deg, transparent, #769df3, transparent); border-radius: 4px; }
+.ifop-login-welcome-icon { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 24px; color: #315bd6; background: linear-gradient(145deg, #f1f5ff, #e5edff); border: 1px solid #dee8fe; border-radius: 16px; }
+.ifop-login-heading > span { color: #607499; font-size: 9px; font-weight: 700; letter-spacing: .14em; }
+.ifop-login-heading h2 { margin: 10px 0 10px; color: #172951; font: 700 31px/1.3 Manrope, sans-serif; letter-spacing: -.045em; }
+.ifop-login-heading h2 > span { color: #527ce0; }
+.ifop-login-heading p { color: #65748e; font-size: 12px; line-height: 1.7; }
+.ifop-login-form { display: flex; flex-direction: column; gap: 21px; margin-top: 28px; }
+.ifop-login .field { gap: 9px; color: #354b72; font-size: 11px; }
+.ifop-login .field > span b { color: #6e8dcc; }
+.ifop-login-input { display: flex; align-items: center; gap: 11px; min-width: 0; min-height: 51px; padding: 0 15px; border: 1px solid #dce4f2; border-radius: 12px; background: #f9faff; transition: border-color .2s, box-shadow .2s, background .2s; }
+.ifop-login-input > svg { flex: 0 0 auto; color: #8196bc; }
+.ifop-login-input:focus-within { border-color: #6a90ed; box-shadow: 0 0 0 4px #315bd60c; background: #fff; }
+.ifop-login .ifop-login-input input { width: 100%; min-width: 0; min-height: 49px; padding: 0; color: #243b64; font: inherit; font-size: 12px; border: 0; outline: 0; box-shadow: none; background: transparent; }
+.ifop-login-input input::placeholder { color: #64748b; font-weight: 400; }
+.ifop-login-password { display: grid; place-items: center; width: 32px; min-height: 36px; flex: 0 0 32px; margin-right: -8px; padding: 4px; border: 0; background: transparent; color: #7c90b4; border-radius: 6px; cursor: pointer; }
+.ifop-login-password:hover { background: #edf2ff; color: #315bd6; }
+.ifop-login-password:focus-visible { outline: 2px solid #315bd6; outline-offset: 2px; }
+.ifop-login-form > .button { position: relative; isolation: isolate; overflow: hidden; min-height: 52px; margin-top: 3px; flex-direction: row-reverse; justify-content: space-between; padding: 0 20px; border: 0; border-radius: 12px; color: #fff; font-size: 12px; font-weight: 600; background: linear-gradient(110deg, #244bb6, #3e6add); box-shadow: 0 7px 18px #315bd627; transition: transform .2s, box-shadow .2s; }
+.ifop-login-form > .button:focus-visible { outline: 3px solid #8dadf5; outline-offset: 4px; }
+.ifop-login-help { display: flex; flex-direction: column; gap: 5px; margin-top: 25px; padding-top: 22px; text-align: center; border-top: 1px solid #edf0f7; }
+.ifop-login-help span { color: #65748e; font-size: 10px; }
+.ifop-login-help strong { color: #4666a4; font-size: 11px; font-weight: 600; }
+.ifop-login-footer { text-align: center; max-width: 100%; color: #61738d; font-size: 10px; line-height: 1.8; overflow-wrap: anywhere; }
+.ifop-login-footer > span { display: block; color: #61738d; font-size: 9px; }
+@keyframes ifop-login-enter { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ifop-login-orbit { from { transform: translateY(-12px) rotate(-7deg); } to { transform: translateY(12px) rotate(7deg); } }
+@media (hover: hover) and (pointer: fine) {
+  .ifop-login-form > .button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 11px 25px #315bd639; background: linear-gradient(110deg, #244bb6, #527ce4); }
+}
+@media (min-width: 1500px) { .ifop-login-story { padding-left: max(64px, calc((100vw - 1350px)/2)); } }
+@media (max-width: 1100px) and (min-width: 801px) {
+  .ifop-login-story { padding: 36px 30px; }
+  .ifop-login-access { padding: 36px 24px; }
+  .ifop-login-card { padding: 30px 26px; }
+  .ifop-login-heading h2 { font-size: 28px; }
+}
+@media (max-width: 800px) {
+  .ifop-login { display: flex; flex-direction: column; }
+  .ifop-login-story { gap: 26px; padding: 28px 28px 32px; }
+  .ifop-login-logo { width: 48px; height: 48px; flex-basis: 48px; border-radius: 13px; }
+  .ifop-login-brand { gap: 13px; }
+  .ifop-login-brand strong { font-size: 18px; }
+  .ifop-login-brand span { font-size: 10px; }
+  .ifop-login-message { margin: 0; padding: 0; }
+  .ifop-login-eyebrow { font-size: 8px; letter-spacing: .12em; }
+  .ifop-login-message h1 { margin: 16px 0 12px; font-size: clamp(37px, 7vw, 52px); line-height: 1.13; }
+  .ifop-login-message > p { max-width: 400px; font-size: 12px; line-height: 1.7; }
+  .ifop-login-community, .ifop-login-story-footer { display: none; }
+  .ifop-login-orbit { width: 410px; right: -160px; top: -35px; opacity: .5; }
+  .ifop-login-access { gap: 22px; padding: 28px 22px 23px; }
+  .ifop-login-access-label { font-size: 8px; }
+  .ifop-login-card { width: min(100%, 440px); padding: 27px; border-radius: 22px; }
+  .ifop-login-welcome-icon { display: none; }
+  .ifop-login-heading h2 { font-size: 27px; }
+  .ifop-login-form { gap: 18px; margin-top: 23px; }
+}
+@media (max-width: 360px) {
+  .ifop-login-story { padding: 23px; }
+  .ifop-login-card { padding: 24px 20px; }
+  .ifop-login-access { padding-right: 16px; padding-left: 16px; }
+  .ifop-login-heading h2 { font-size: 25px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ifop-login *, .ifop-login *::before, .ifop-login *::after { animation: none !important; transition: none !important; }
+}
