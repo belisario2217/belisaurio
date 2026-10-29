@@ -1,3 +1,4 @@
+import { useReducedMotion } from "../lib/useReducedMotion";
 import { useEffect, useState } from "react";
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, ArrowUpRight, Award, BookOpenCheck, GraduationCap, TrendingUp, UsersRound } from "lucide-react";
@@ -12,6 +13,7 @@ type Analytics = {
 };
 
 export function DashboardPage() {
+  const reducedMotion = useReducedMotion();
   const [data, setData] = useState<Analytics | null>(null);
   useEffect(() => { api<Analytics>("/analytics").then(setData); }, []);
 
@@ -59,8 +61,8 @@ export function DashboardPage() {
                 <CartesianGrid stroke="#e6edf3" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#627d98", fontSize: 12 }} />
                 <YAxis domain={[0, 10]} axisLine={false} tickLine={false} tick={{ fill: "#829ab1", fontSize: 11 }} />
-                <Tooltip cursor={{ fill: "#f3f7fa" }} contentStyle={{ border: "1px solid #d9e2ec", borderRadius: 6 }} />
-                <Bar dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} maxBarSize={44} />
+                <Tooltip isAnimationActive={!reducedMotion} cursor={{ fill: "#f3f7fa" }} contentStyle={{ border: "1px solid #d9e2ec", borderRadius: 6 }} />
+                <Bar isAnimationActive={!reducedMotion} dataKey="average" fill="#7041c4" radius={[3, 3, 0, 0]} maxBarSize={44} />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -1,0 +1,288 @@
+/* Shared interface surfaces. Blur is limited to navigation, header and dialogs. */
+.liquid-campus {
+  --glass-edge: #ffffffd9;
+  --glass-shadow: 0 12px 36px -18px #233d772c, inset 0 1px 0 #ffffff;
+  --section-accent: #315bd6;
+  --section-deep: #2448b4;
+  --section-soft: #edf2ff;
+  --section-glow: #c5d7ff;
+  grid-template-columns: 284px minmax(0,1fr);
+  background: radial-gradient(ellipse at 8% 4%,#e2eaff 0,transparent 40%),radial-gradient(ellipse at 96% 20%,#eee2fc 0,transparent 34%),radial-gradient(ellipse at 75% 85%,#dff4ee 0,transparent 38%),#f4f6fd;
+  color: #293b5b;
+}
+.liquid-campus[data-section="academic"] { --section-accent:#7346c9; --section-deep:#5e32ad; --section-soft:#f2edff; --section-glow:#e0d0ff; }
+.liquid-campus[data-section="finance"] { --section-accent:#07816e; --section-deep:#006958; --section-soft:#e9f8f1; --section-glow:#b9e8d7; }
+.liquid-campus[data-section="campus"] { --section-accent:#087e97; --section-deep:#07697c; --section-soft:#e9f7fc; --section-glow:#bfe7f5; }
+.liquid-campus[data-section="community"] { --section-accent:#bb3979; --section-deep:#9c2863; --section-soft:#fff0f7; --section-glow:#f2c9e1; }
+.liquid-campus[data-section="settings"] { --section-accent:#5266a1; --section-deep:#405284; --section-soft:#eff2fc; --section-glow:#cfd9f2; }
+.liquid-campus [data-tone="general"] { --tile-accent:#315bd6; --tile-soft:#eaf0ff; --tile-edge:#cbd9fb; }
+.liquid-campus [data-tone="academic"] { --tile-accent:#7346c9; --tile-soft:#f1eaff; --tile-edge:#decdf8; }
+.liquid-campus [data-tone="campus"] { --tile-accent:#087d95; --tile-soft:#e7f7fc; --tile-edge:#c4e7f1; }
+.liquid-campus [data-tone="finance"] { --tile-accent:#07816e; --tile-soft:#e6f8ef; --tile-edge:#bfe8d8; }
+.liquid-campus [data-tone="community"] { --tile-accent:#bb3979; --tile-soft:#fff0f6; --tile-edge:#f2c9dd; }
+.liquid-campus .main-area { min-width:0; }
+.liquid-campus .sidebar { top:16px; height:calc(100vh - 32px); height:calc(100svh - 32px); margin:16px 0 16px 16px; border:1px solid #ffffffe6; border-radius:25px; color:#3c5073; background:linear-gradient(155deg,#ffffffec,#eef2ffdf); box-shadow:var(--glass-shadow); -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px); }
+.liquid-campus .brand { margin:12px 12px 0; padding:15px 12px; gap:10px; border:1px solid #ffffff38; border-radius:18px; background:linear-gradient(130deg,#172951,#3458a8); box-shadow:inset 0 1px 0 #ffffff26; }
+.liquid-campus .brand img { width:44px; height:44px; flex-basis:44px; padding:0; clip-path:inset(2% round 9px); }
+.liquid-campus .brand-copy strong { font-size:13px; }
+.liquid-campus .brand-copy span { color:#c1d2f4; font-size:10px; }
+.liquid-campus .main-nav { padding:12px 11px; scrollbar-width:thin; scrollbar-color:#c2d0ec transparent; }
+.liquid-campus .nav-category { --nav-accent:#315bd6; --nav-pale:#e9efff; margin-bottom:15px; }
+.liquid-campus .nav-category[data-area="academic"] { --nav-accent:#7346c9; --nav-pale:#f0eafd; }
+.liquid-campus .nav-category[data-area="campus"] { --nav-accent:#087d95; --nav-pale:#e5f5fa; }
+.liquid-campus .nav-category[data-area="finance"] { --nav-accent:#07816e; --nav-pale:#e4f5ec; }
+.liquid-campus .nav-category[data-area="community"] { --nav-accent:#bb3979; --nav-pale:#fcecf4; }
+.liquid-campus .nav-category[data-area="settings"] { --nav-accent:#5266a1; --nav-pale:#ebeff9; }
+.liquid-campus .nav-section-label { margin:13px 0 6px; padding:0 10px; color:#60718d; font-size:9px; letter-spacing:.12em; }
+.liquid-campus .main-nav a { position:relative; gap:13px; min-height:42px; height:auto; padding:11px 13px; border:1px solid transparent; border-radius:12px; color:#506180; font-size:12px; transition:background .18s,color .18s,transform .18s; }
+.liquid-campus .main-nav a::before { content:""; position:absolute; left:8px; top:7px; width:28px; height:28px; border-radius:9px; background:var(--nav-pale); }
+.liquid-campus .main-nav a svg { position:relative; color:var(--nav-accent); width:18px; height:18px; }
+.liquid-campus .main-nav a span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.liquid-campus .main-nav a:hover:not(.active) { color:var(--nav-accent); background:#ffffffd9; border-color:#ffffff; }
+.liquid-campus .main-nav a.active { color:#fff; background:var(--nav-accent); background:linear-gradient(115deg,var(--nav-accent),color-mix(in srgb,var(--nav-accent),#7094e9 15%)); border-color:#ffffff57; box-shadow:0 5px 13px color-mix(in srgb,var(--nav-accent) 22%,transparent),inset 0 1px 0 #ffffff38; }
+.liquid-campus .main-nav a.active::before { background:#ffffff1f; }
+.liquid-campus .main-nav a.active svg { color:#fff; }
+.liquid-campus .sidebar-footer { padding:10px; border-top:1px solid #dce5f480; background:#ffffff45; }
+.liquid-campus .cycle-chip { border:1px solid #ffffff; border-radius:13px; background:linear-gradient(115deg,#e9eeff,#f3edff); }
+.liquid-campus .cycle-chip svg { color:#526abd; }
+.liquid-campus .cycle-chip span { color:#7180a0; font-size:9px; }
+.liquid-campus .cycle-chip strong { color:#344b7a; font-size:11px; overflow:hidden; text-overflow:ellipsis; }
+.liquid-campus .collapse-button { color:#657795; font-size:10px; }
+.liquid-campus .collapse-button:hover { color:#315bd6; }
+.liquid-campus.sidebar-collapsed { grid-template-columns:96px minmax(0,1fr); }
+.liquid-campus.sidebar-collapsed .brand { justify-content:center; margin:10px 7px 0; padding:8px; }
+.liquid-campus.sidebar-collapsed .main-nav { padding:10px; }
+.liquid-campus.sidebar-collapsed .main-nav a { padding:11px 0; }
+.liquid-campus.sidebar-collapsed .main-nav a::before { left:50%; transform:translateX(-50%); }
+.liquid-campus.sidebar-collapsed .nav-category { margin-bottom:8px; }
+.liquid-campus.sidebar-collapsed .nav-category+.nav-category { border-top:1px solid #dce3f2; padding-top:8px; }
+.liquid-campus .topbar { top:16px; min-height:86px; height:auto; margin:16px 26px 0; padding:18px 23px; border:1px solid #ffffffd9; border-radius:23px; background:#ffffffc9; box-shadow:var(--glass-shadow); -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px); gap:16px; }
+.liquid-campus .topbar-title { flex:1; min-width:0; }
+.liquid-campus .topbar-title>div { min-width:0; }
+.liquid-campus .topbar-title .topbar-eyebrow { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:5px; color:#5f718b; font-size:9px; }
+.liquid-campus .topbar-eyebrow b { color:var(--section-accent); font-weight:600; }
+.liquid-campus .topbar-eyebrow i { width:3px; height:3px; border-radius:50%; background:#b8c4dc; }
+.liquid-campus .topbar-title h1 { padding:0; margin:0; font-size:20px; line-height:1.35; letter-spacing:-.035em; }
+.liquid-campus .topbar-title h1::before { content:none; }
+.liquid-campus .account { gap:9px; }
+.liquid-campus .account-copy { min-width:0; max-width:180px; }
+.liquid-campus .account-copy strong { font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.liquid-campus .account-copy span { font-size:9px; color:#65758e; }
+.liquid-campus .avatar { width:38px; height:38px; border:2px solid #fff; box-shadow:0 4px 12px #315bd625; background:linear-gradient(135deg,var(--section-accent),#809fe8); }
+.liquid-campus .content { padding:25px 27px 40px; }
+.liquid-campus .page-stack { gap:22px; }
+.liquid-campus .content :is(.panel,.table-section,.toolbar,.filter-bar,.sub-toolbar,.settings-main,.role-card,.curricular-admin,.catalog-nav,.assignment-pane,.plan-sidebar,.report-item) { border:1px solid transparent; border-radius:21px; background:linear-gradient(145deg,#ffffffed,#ffffffd6) padding-box,linear-gradient(125deg,#fff,#cddcf4aa,#e6d7f4aa,#fff) border-box; box-shadow:var(--glass-shadow); }
+.liquid-campus .toolbar { gap:14px; flex-wrap:wrap; padding:17px 20px; }
+.liquid-campus .toolbar-primary,.liquid-campus .toolbar-actions { min-width:0; max-width:100%; }
+.liquid-campus :is(.panel-heading,.section-heading,.catalog-header,.modal-header) { padding:20px 22px; border-color:#e6ebf580; background:linear-gradient(110deg,#ffffffc9,var(--section-soft)); border-radius:20px 20px 0 0; }
+.liquid-campus :is(.panel-heading,.section-heading) h2,.liquid-campus :is(.panel-heading,.section-heading) h3 { letter-spacing:-.025em; }
+.liquid-campus .overview-strip { border:1px solid #ffffffdf; border-radius:23px; background:linear-gradient(120deg,#eef2ff,var(--section-soft) 60%,#e9f7f5); box-shadow:var(--glass-shadow); }
+.liquid-campus .overview-strip h2 { font-size:24px; letter-spacing:-.045em; }
+.liquid-campus .metric-grid { gap:15px; }
+.liquid-campus .metric { border:1px solid #ffffff; border-radius:20px; box-shadow:var(--glass-shadow); background:linear-gradient(140deg,#fff,#f4f3ff); padding:20px; }
+.liquid-campus .metric:nth-child(2) { background:linear-gradient(140deg,#fff,#eaf8f1); }
+.liquid-campus .metric:nth-child(3) { background:linear-gradient(140deg,#fff,#fff5e6); }
+.liquid-campus .metric:nth-child(4) { background:linear-gradient(140deg,#fff,#ffedf4); }
+.liquid-campus .metric-icon { border-radius:13px; }
+.liquid-campus input:not([type="checkbox"]):not([type="radio"]),.liquid-campus select,.liquid-campus textarea { border-color:#dce4f1; border-radius:11px; background-color:#ffffffdb; transition:border-color .18s,box-shadow .18s; }
+.liquid-campus input:focus,.liquid-campus select:focus,.liquid-campus textarea:focus { border-color:var(--section-accent); box-shadow:0 0 0 4px color-mix(in srgb,var(--section-accent) 10%,transparent); }
+.liquid-campus .button,.liquid-campus .icon-button { border-radius:11px; }
+.liquid-campus .button-primary { border:1px solid #ffffff33; background:linear-gradient(115deg,var(--section-deep),var(--section-accent)); box-shadow:0 4px 12px color-mix(in srgb,var(--section-accent) 17%,transparent),inset 0 1px 0 #ffffff33; }
+.liquid-campus .button-secondary { border-color:#d9e2f2; background:#ffffffce; }
+.liquid-campus .button-ghost { color:var(--section-accent); }
+.liquid-campus .icon-button { border-color:#dee5f1; background:#ffffffb8; }
+.liquid-campus .page-tabs { padding:5px; border:1px solid #ffffff; border-radius:14px; background:#ffffff80; }
+.liquid-campus .page-tabs button { border:1px solid transparent; border-radius:10px; }
+.liquid-campus .page-tabs button.active { color:#fff; background:linear-gradient(115deg,var(--section-deep),var(--section-accent)); box-shadow:0 4px 10px color-mix(in srgb,var(--section-accent) 20%,transparent); }
+.liquid-campus .dossier-tabs button.active,.liquid-campus .segmented button.active { color:var(--section-deep); background:var(--section-soft); border-color:var(--section-glow); }
+.liquid-campus .table-wrap { border-radius:0 0 20px 20px; }
+.liquid-campus th { padding-top:15px; padding-bottom:15px; color:#526484; background:linear-gradient(115deg,#f2f5fc,var(--section-soft)); border-color:#e5eaf4; font-size:10px; }
+.liquid-campus td { padding-top:15px; padding-bottom:15px; border-color:#eaf0f7; }
+.liquid-campus tbody tr:hover { background:color-mix(in srgb,var(--section-soft) 70%,#fff); }
+.liquid-campus .status-badge { border-radius:20px; font-size:9px; padding:5px 10px; }
+.liquid-campus .modal-backdrop { background:#17295166; -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px); }
+.liquid-campus .modal { border:1px solid #ffffffdf; border-radius:25px; background:#fdfdff; box-shadow:0 24px 90px #17295145,inset 0 1px 0 #fff; }
+.liquid-campus .modal-header { border-radius:24px 24px 0 0; }
+.liquid-campus .modal-actions { background:#f7f9ff; }
+.liquid-campus .modal .table-wrap { border-radius:12px; }
+.liquid-campus .workspace-hero { position:relative; isolation:isolate; overflow:hidden; min-height:190px; padding:30px 34px; color:#fff; background:linear-gradient(115deg,#21396e,#4e55b7 62%,#8072cd); box-shadow:0 14px 32px -15px #4549a849,inset 0 1px 0 #ffffff40; }
+.liquid-campus .workspace-hero>div:first-child { position:relative; z-index:1; max-width:75%; }
+.liquid-campus .workspace-hero .workspace-hero-label { display:flex; align-items:center; gap:8px; color:#d6ddff; font-size:10px; }
+.liquid-campus .workspace-hero h2 { color:#fff; margin:12px 0 10px; font:700 clamp(26px,3vw,38px)/1.2 Manrope,sans-serif; letter-spacing:-.045em; }
+.liquid-campus .workspace-hero h2 em { font-style:normal; color:#d9d2ff; }
+.liquid-campus .workspace-hero h2>span { color:#a4ddf3; }
+.liquid-campus .workspace-hero p { color:#e0e3ff; font-size:12px; line-height:1.8; }
+.liquid-campus .workspace-hero-orb { position:absolute; right:5%; top:16px; display:grid; place-items:center; width:160px; height:160px; color:#e6e2ff; border:1px solid #ffffff60; border-radius:50%; background:linear-gradient(145deg,#ffffff33,#ffffff05); box-shadow:inset 0 2px 0 #ffffff66,0 12px 40px #252a7c1c; animation:campus-float 12s ease-in-out infinite alternate; }
+.liquid-campus .workspace-hero-orb::after { content:""; position:absolute; inset:-15px; border:1px solid #ffffff29; border-radius:50%; transform:rotate(-20deg) scaleY(.72) scaleX(1.18); }
+.liquid-campus .workspace-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:15px; }
+.liquid-campus .workspace-stat { display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:12px; padding:20px; border:1px solid #ffffffeb; border-radius:21px; background:linear-gradient(130deg,#ffffffed,var(--tile-soft)); box-shadow:var(--glass-shadow); }
+.liquid-campus .workspace-stat-icon { width:42px; height:42px; display:grid; place-items:center; color:#fff; border:1px solid #ffffff55; border-radius:14px; background:linear-gradient(130deg,var(--tile-accent),color-mix(in srgb,var(--tile-accent),#9cb7f2 35%)); box-shadow:0 5px 12px color-mix(in srgb,var(--tile-accent) 18%,transparent); }
+.liquid-campus .workspace-stat div>span { color:#667795; font-size:10px; }
+.liquid-campus .workspace-stat strong { display:block; color:#233b64; margin-top:5px; font:700 28px/1.1 Manrope,sans-serif; }
+.liquid-campus .workspace-stat-detail { grid-column:1/-1; padding-top:10px; border-top:1px solid #ffffffb3; color:#60718d; font-size:9px; }
+.liquid-campus .workspace-group { min-width:0; }
+.liquid-campus .workspace-group-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:3px 2px 14px; }
+.liquid-campus .workspace-group-heading h3 { color:#2b3f64; font:700 16px/1.4 Manrope,sans-serif; letter-spacing:-.025em; }
+.liquid-campus .workspace-group-heading p { margin-top:3px; color:#5f718e; font-size:11px; }
+.liquid-campus .workspace-group-heading>span { padding:6px 10px; border:1px solid #ffffff; border-radius:20px; color:var(--tile-accent); background:var(--tile-soft); font-size:9px; white-space:nowrap; }
+.liquid-campus .workspace-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr)); gap:15px; }
+.liquid-campus .workspace-group[data-count="1"] .workspace-grid { grid-template-columns:minmax(0,1fr); }
+.liquid-campus .workspace-card { min-width:0; padding:21px; border:1px solid transparent; border-radius:21px; background:linear-gradient(140deg,#ffffffef,#ffffffcf) padding-box,linear-gradient(130deg,#fff,var(--tile-edge),#fff) border-box; box-shadow:var(--glass-shadow); }
+.liquid-campus .workspace-card-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.liquid-campus .workspace-card-top>span { display:grid; place-items:center; width:43px; height:43px; border:1px solid #ffffff; border-radius:13px; color:var(--tile-accent); background:linear-gradient(130deg,#fff,var(--tile-soft)); }
+.liquid-campus .workspace-card-top>svg { color:#9aabc5; }
+.liquid-campus .workspace-card-top span svg { color:var(--tile-accent); }
+.liquid-campus .workspace-card h3 { margin:18px 0 6px; font-size:13px; color:#2e446b; }
+.liquid-campus .workspace-card p { font-size:11px; line-height:1.7; color:#5f718e; }
+.liquid-campus .student-welcome { position:relative; border:1px solid #ffffff80; border-radius:24px; background:linear-gradient(115deg,#273c81,#5c50b3 75%,#7776ca); box-shadow:0 12px 32px -15px #4d4a9e66,inset 0 1px 0 #ffffff35; }
+.liquid-campus .student-welcome span,.liquid-campus .student-welcome small,.liquid-campus .student-welcome p { color:#dbe1ff; }
+.liquid-campus .student-welcome h2 { color:#fff; letter-spacing:-.03em; overflow-wrap:anywhere; }
+.liquid-campus :is(.portal-metrics,.payment-metrics) { gap:15px; }
+.liquid-campus :is(.portal-metrics,.payment-metrics)>div { border:1px solid #fff; border-radius:21px; background:linear-gradient(140deg,#fff,#eef0ff); box-shadow:var(--glass-shadow); }
+.liquid-campus :is(.portal-metrics,.payment-metrics)>div:nth-child(2) { background:linear-gradient(140deg,#fff,#e7f8f0); }
+.liquid-campus :is(.portal-metrics,.payment-metrics)>div:nth-child(3) { background:linear-gradient(140deg,#fff,#fff1f6); }
+.liquid-campus :is(.portal-metrics,.payment-metrics)>div:nth-child(4) { background:linear-gradient(140deg,#fff,#e9f7fc); }
+.liquid-campus .curricular-progress { border:1px solid #fff; border-radius:22px; background:linear-gradient(115deg,#ffffffed,#f0eeffde); box-shadow:var(--glass-shadow); }
+.liquid-campus .curricular-track { height:13px; border:1px solid #ffffff; background:#e6e7f7; }
+.liquid-campus .curricular-track i { background:linear-gradient(90deg,#406ee0,#8d6ad4,#83c7e4); }
+.liquid-campus .portal-section-links { gap:15px; }
+.liquid-campus .portal-section-links>a { border:1px solid #fff; border-radius:20px; background:linear-gradient(120deg,#fff,#eff2ff); box-shadow:var(--glass-shadow); }
+.liquid-campus .portal-section-links>a:nth-child(2) { background:linear-gradient(120deg,#fff,#e8f8f0); }
+.liquid-campus .cred-portal-link { border:1px solid #ffffff; border-radius:21px; background:linear-gradient(110deg,#e9efff,#f2eaff,#e8f7fb); box-shadow:var(--glass-shadow); }
+.liquid-campus .cred-portal-link strong { color:#4c489b; }
+.liquid-campus .cred-portal-link span { color:#697597; }
+.liquid-campus .dashboard-grid,.liquid-campus .analytics-grid { gap:20px; }
+.liquid-campus .row-menu { border:1px solid #e0e7f3; border-radius:14px; background:#fff; box-shadow:0 12px 36px #17295124; }
+.liquid-campus a:focus-visible,.liquid-campus button:focus-visible { outline:3px solid color-mix(in srgb,var(--section-accent) 45%,#fff); outline-offset:3px; }
+.liquid-campus .page-stack>:is(section,article,header,.toolbar,.dashboard-grid,.analytics-grid) { animation:campus-reveal .38s cubic-bezier(.22,1,.36,1) backwards; }
+.liquid-campus .page-stack>:nth-child(2) { animation-delay:35ms; }
+.liquid-campus .page-stack>:nth-child(3) { animation-delay:65ms; }
+.liquid-campus .page-stack>:nth-child(4) { animation-delay:95ms; }
+@keyframes campus-reveal { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@keyframes campus-float { from { transform:translateY(-4px) rotate(-8deg); } to { transform:translateY(4px) rotate(8deg); } }
+@media(hover:hover) and (pointer:fine) {
+ .liquid-campus .workspace-card:hover { transform:translateY(-4px); border-color:var(--tile-edge); box-shadow:0 15px 30px -14px color-mix(in srgb,var(--tile-accent) 35%,transparent),inset 0 1px 0 #fff; }
+ .liquid-campus .main-nav a:hover:not(.active) { transform:translateX(2px); }
+}
+@media(max-width:1180px) {
+ .liquid-campus { grid-template-columns:264px minmax(0,1fr); }
+ .liquid-campus .content { padding:22px; }
+ .liquid-campus .topbar { margin-left:22px; margin-right:22px; }
+ .liquid-campus .workspace-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .liquid-campus .workspace-grid { grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); }
+ .liquid-campus .workspace-card { padding:18px; }
+ .liquid-campus .account-copy { max-width:150px; }
+}
+@media(max-width:900px) {
+ .liquid-campus,.liquid-campus.sidebar-collapsed { grid-template-columns:minmax(0,1fr); }
+ .liquid-campus .sidebar { position:fixed; top:12px; left:12px; margin:0; width:278px; max-width:calc(100vw - 24px); height:calc(100vh - 24px); height:calc(100svh - 24px); opacity:0; visibility:hidden; transform:translateX(calc(-100% - 24px)); transition:transform .24s,opacity .2s,visibility .2s; }
+ .liquid-campus .sidebar.mobile-open { transform:none; opacity:1; visibility:visible; }
+ .liquid-campus .topbar { top:10px; margin:12px 18px 0; padding:16px 18px; border-radius:20px; }
+ .liquid-campus .topbar .mobile-menu { flex:0 0 auto; }
+ .liquid-campus .sidebar-mobile-close { width:29px; height:29px; flex:0 0 29px; color:#fff; background:#ffffff19; border-color:#ffffff40; }
+ .liquid-campus .brand-copy { flex:1; }
+ .liquid-campus .mobile-overlay { background:#162b5961; }
+ .liquid-campus .content { padding:20px 18px 32px; }
+ .liquid-campus .workspace-hero { padding:26px; }
+}
+@media(max-width:680px) {
+ .liquid-campus .topbar { min-height:75px; margin:10px 12px 0; padding:13px 14px; gap:9px; border-radius:18px; }
+ .liquid-campus .topbar-title h1 { font-size:16px; }
+ .liquid-campus .topbar-title .topbar-eyebrow { font-size:8px; gap:5px; }
+ .liquid-campus .topbar-title .topbar-eyebrow i { display:none; }
+ .liquid-campus .account { gap:6px; }
+ .liquid-campus .account .avatar { display:none; }
+ .liquid-campus .account .icon-button { width:34px; height:34px; }
+ .liquid-campus .content { padding:18px 12px 28px; }
+ .liquid-campus .page-stack { gap:17px; }
+ .liquid-campus .workspace-hero { min-height:167px; padding:23px; }
+ .liquid-campus .workspace-hero>div:first-child { max-width:100%; }
+ .liquid-campus .workspace-hero-orb { width:110px; height:110px; right:-25px; top:36px; z-index:-1; opacity:.32; }
+ .liquid-campus .workspace-hero-label { font-size:9px; }
+ .liquid-campus .workspace-hero p { font-size:11px; }
+ .liquid-campus .workspace-stats { gap:11px; }
+ .liquid-campus .workspace-stat { grid-template-columns:1fr; gap:10px; padding:17px; border-radius:18px; }
+ .liquid-campus .workspace-stat-icon { width:36px; height:36px; border-radius:12px; }
+ .liquid-campus .workspace-stat strong { font-size:26px; }
+ .liquid-campus .workspace-stat-detail { display:none; }
+ .liquid-campus .workspace-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+ .liquid-campus .workspace-card { padding:17px; border-radius:18px; }
+ .liquid-campus .workspace-card-top>span { width:36px; height:36px; border-radius:11px; }
+ .liquid-campus .workspace-card h3 { font-size:12px; line-height:1.5; }
+ .liquid-campus .workspace-card p { font-size:10px; }
+ .liquid-campus .workspace-card-top>svg { width:14px; }
+ .liquid-campus .workspace-group-heading h3 { font-size:15px; }
+ .liquid-campus .workspace-group-heading p { font-size:10px; }
+ .liquid-campus .workspace-group-heading>span { font-size:8px; }
+ .liquid-campus .toolbar { padding:16px; }
+ .liquid-campus .toolbar .button { min-width:0; max-width:100%; white-space:normal; }
+ .liquid-campus :is(.panel-heading,.section-heading) { padding:18px; flex-wrap:wrap; gap:12px; }
+ .liquid-campus .modal { border-radius:23px 23px 0 0; }
+ .liquid-campus .modal-header { border-radius:22px 22px 0 0; }
+ .liquid-campus .student-welcome { padding:23px; border-radius:22px; }
+ .liquid-campus .portal-section-links { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:360px) { .liquid-campus .workspace-grid { grid-template-columns:minmax(0,1fr); } }
+@media(prefers-reduced-motion:reduce) {
+ .liquid-campus *,.liquid-campus *::before,.liquid-campus *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+ .liquid-campus .workspace-card:hover { transform:none; }
+}
+@media(prefers-reduced-transparency:reduce) { .liquid-campus :is(.sidebar,.topbar,.modal) { -webkit-backdrop-filter:none;backdrop-filter:none; background-color:#fbfcff; } }
+@media print {
+ .liquid-campus { display:block!important; background:#fff!important; }
+ .liquid-campus :is(.sidebar,.topbar,.mobile-overlay) { display:none!important; }
+ .liquid-campus :is(.panel,.table-section,.toolbar,.workspace-card,.metric,.student-welcome,.workspace-hero) { background:#fff!important; color:#172951!important; border:1px solid #ddd; box-shadow:none; }
+ .liquid-campus .content { padding:0; }
+ .liquid-campus * { -webkit-backdrop-filter:none!important;backdrop-filter:none!important; animation:none!important; }
+}
+
+.campus-skip-link { position:fixed; left:20px; top:12px; z-index:150; padding:12px 18px; border-radius:12px; background:#172951; color:#fff; transform:translateY(-150%); }
+.campus-skip-link:focus { transform:none; }
+@media(max-width:900px) {
+ .liquid-campus.sidebar-collapsed .brand { margin:12px 12px 0; padding:15px 12px; justify-content:flex-start; }
+ .liquid-campus.sidebar-collapsed .brand-copy,.liquid-campus.sidebar-collapsed .cycle-chip div { display:flex; }
+ .liquid-campus.sidebar-collapsed .nav-section-label,.liquid-campus.sidebar-collapsed .main-nav a span { display:block; }
+ .liquid-campus.sidebar-collapsed .main-nav a { justify-content:flex-start; padding:11px 13px; }
+ .liquid-campus.sidebar-collapsed .main-nav a::before { left:8px; transform:none; }
+ .liquid-campus.sidebar-collapsed .nav-category { margin-bottom:15px; }
+ .liquid-campus.sidebar-collapsed .nav-category+.nav-category { border-top:0; padding-top:0; }
+ .liquid-campus.sidebar-collapsed .cycle-chip { justify-content:flex-start; padding:8px 10px; }
+}
+@media(max-width:680px) {
+ .liquid-campus .workspace-group[data-count="3"] .workspace-card:last-child { grid-column:1/-1; }
+ .liquid-campus .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+ .liquid-campus .metric { flex-direction:column; align-items:flex-start; gap:12px; padding:18px; }
+ .liquid-campus .metric>div:last-child { display:flex; flex-direction:column; align-items:flex-start; gap:6px; width:100%; }
+ .liquid-campus .metric strong { font-size:26px; }
+ .liquid-campus .metric small { white-space:normal; font-size:9px; margin:0; }
+}
+.liquid-campus .workspace-hero h2 { overflow-wrap:anywhere; }
+.liquid-campus :is(.portal-metrics,.payment-metrics) { border:0; background:transparent; box-shadow:none; }
+.liquid-campus .nav-category[data-area="general"] a[href="/mi-avance"],.liquid-campus .nav-category[data-area="general"] a[href="/mis-calificaciones"] { --nav-accent:#7346c9; --nav-pale:#f0eafd; }
+.liquid-campus .nav-category[data-area="general"] a[href="/mis-pagos"] { --nav-accent:#07816e; --nav-pale:#e4f5ec; }
+.liquid-campus .nav-category[data-area="general"] a[href="/mi-credencial"] { --nav-accent:#087d95; --nav-pale:#e5f5fa; }
+@media print {
+ .liquid-campus .workspace-hero-orb { display:none; }
+ .liquid-campus :is(.workspace-hero,.student-welcome) :is(h2,em,p,span,small,strong) { color:#172951!important; }
+}
+
+/* Keep chart drawing inside its viewport while responsive geometry updates. */
+.liquid-campus .recharts-surface { overflow:hidden; }
+.liquid-campus :is(.grades-layout,.catalog-layout,.plans-layout,.group-admin-layout) { border:1px solid #ffffffdf; border-radius:22px; background:#ffffffd6; box-shadow:var(--glass-shadow); }
+.liquid-campus :is(.plans-pane,.catalog-nav,.assignment-pane) { background:linear-gradient(150deg,#fbfcff,var(--section-soft)); }
+.liquid-campus :is(.grade-header,.plan-header,.group-admin-header) { background:linear-gradient(120deg,#fff,var(--section-soft)); border-color:#e0e7f2; }
+.liquid-campus :is(.assignment-list,.plans-list)>button.active { color:var(--section-accent); background:linear-gradient(110deg,#fff,var(--section-soft)); box-shadow:inset 3px 0 var(--section-accent); }
+.liquid-campus .payment-account-header { border:1px solid #ffffffa8; border-radius:23px; background:linear-gradient(110deg,#145e62,#218781,#528eac); box-shadow:var(--glass-shadow); }
+.liquid-campus .payment-account-header :is(span,p) { color:#dcf5f0; }
+.liquid-campus .payment-account-header h2 { color:#fff; }
+.liquid-campus .payment-search-results>button { border:1px solid #ffffff; border-radius:17px; background:linear-gradient(135deg,#fff,var(--section-soft)); box-shadow:var(--glass-shadow); }
+.liquid-campus .payment-search-results>button.active { border-color:var(--section-accent); box-shadow:inset 3px 0 var(--section-accent),var(--glass-shadow); }
+.liquid-campus .payment-student-icon { border-radius:11px; background:var(--section-soft); color:var(--section-accent); }
+.liquid-campus .payment-overview { border:1px solid #ffffff; border-radius:21px; background:linear-gradient(120deg,#ffffffed,#eaf8f0); box-shadow:var(--glass-shadow); }
+.liquid-campus .group-admin-intro { border-radius:21px; background:linear-gradient(115deg,#44358c,#7964bf); border:1px solid #ffffff6e; }
+@media print {
+ .liquid-campus .payment-account-header,.liquid-campus .payment-account-header :is(h2,span,p) { background:#fff!important; color:#172951!important; }
+}
+/* Hidden chart tooltips must not enlarge the page after viewport changes. */
+.liquid-campus .recharts-responsive-container { overflow:hidden; }
+.liquid-campus .payment-account-actions .button span { color:inherit; }
