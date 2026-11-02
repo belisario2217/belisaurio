@@ -8,6 +8,7 @@ const ImportAssistantPage = lazy(() => import("./pages/ImportAssistantPage").the
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then(module => ({ default: module.WorkspacePage })));
 const StudentDossierPage = lazy(() => import("./pages/StudentDossierPage").then(module => ({ default: module.StudentDossierPage })));
 const PayrollPage = lazy(() => import("./pages/PayrollPage").then(module => ({ default: module.PayrollPage })));
+const TeacherPayrollPage = lazy(() => import("./pages/TeacherPayrollPage").then(module => ({ default: module.TeacherPayrollPage })));
 const BalancePage = lazy(() => import("./pages/BalancePage").then(module => ({ default: module.BalancePage })));
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
@@ -60,6 +61,7 @@ export function App() {
               <Route path="/asistente-importacion" element={<ImportAssistantPage />} />
               <Route path="/balance" element={<BalancePage />} />
               <Route path="/nomina" element={<PayrollPage />} />
+              <Route path="/nomina/docentes" element={<TeacherPayrollPage />} />
               <Route path="/panel" element={<DashboardPage />} />
               <Route path="/grupos" element={<GroupManagementPage />} />
               <Route path="/calificaciones" element={<GradesPage />} />

@@ -50,6 +50,7 @@ const titles: Record<string, string> = {
   "/documentos": "Documentos oficiales",
   "/credenciales": "Credenciales estudiantiles",
   "/nomina": "Nómina docente y administrativa",
+  "/nomina/docentes": "Calendario y nómina docente por hora",
   "/balance": "Balance mensual",
   "/asistente-importacion": "Asistente de archivos",
   "/catalogos": "Catálogos administrativos",

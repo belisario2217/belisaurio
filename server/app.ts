@@ -22,6 +22,8 @@ import { paymentsRouter } from "./routes/payments.js";
 import { messagesRouter } from "./routes/messages.js";
 import { groupManagementRouter } from "./routes/group-management.js";
 import { payrollRouter } from "./routes/payroll.js";
+import { teacherPayrollRouter } from "./routes/teacher-payroll.js";
+import { ensureTeacherPayrollState } from "./services/teacher-payroll.js";
 import { improvementsRouter } from "./routes/improvements.js";
 import { importAssistantRouter } from "./routes/import-assistant.js";
 import { documentVerificationRouter } from "./routes/document-verification.js";
@@ -30,6 +32,7 @@ import { ensureAllStudentAccounts } from "./services/student-account.js";
 import { defaultInstitutionLogoUrl, institutionLogoPublicUrl } from "./services/institution-logo.js";
 
 ensureAllStudentAccounts();
+ensureTeacherPayrollState();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const uploadsDir = process.env.UPLOADS_PATH
@@ -43,6 +46,7 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: { directives: { imgSrc: ["'self'","data:","blob:"], mediaSrc: ["'self'","blob:"] } }
 }));
 app.use(cors({ origin: process.env.APP_ORIGIN ?? "http://localhost:4173" }));
+app.use("/api/teacher-payroll", express.json({ limit: "8mb" }));
 app.use(express.json({ limit: "1mb" }));
 app.use("/assets", express.static(path.join(root, "public", "assets")));
 app.use("/uploads", express.static(uploadsDir));
@@ -77,6 +81,7 @@ app.use("/api/messages", authenticate, messagesRouter);
 app.use("/api/group-management", authenticate, groupManagementRouter);
 app.use("/api/attendance", authenticate, (_req, res) => res.status(410).json({ message: "La función de asistencia fue retirada del sistema." }));
 app.use("/api/payroll", authenticate, payrollRouter);
+app.use("/api/teacher-payroll", authenticate, teacherPayrollRouter);
 app.use("/api/improvements", authenticate, improvementsRouter);
 app.use("/api/import-assistant", authenticate, importAssistantRouter);
 

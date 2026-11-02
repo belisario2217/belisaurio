@@ -8,6 +8,10 @@ import ExcelJS from "exceljs";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "ifop-folio-deletion-"));
 process.env.DATABASE_PATH = path.join(directory, "school.db");
 process.env.JWT_SECRET = "synthetic-folio-deletion";
+// Receipt-linked tuition charges mature on day 10. Keep this deletion regression
+// after that date so its restored-debt assertion does not depend on the CI run day.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-10-15T18:00:00.000Z"));
 const { app } = await import("./app.js");
 const { db, get, run } = await import("./db.js");
 const { loadUser, signToken } = await import("./auth.js");
@@ -16,7 +20,7 @@ const auth = `Bearer ${signToken(loadUser(admin)!)}`;
 const today = new Intl.DateTimeFormat("sv-SE", {timeZone:"America/Mexico_City"}).format(new Date());
 const month = today.slice(0,7);
 let sequence = 0;
-afterAll(() => { db.close(); fs.rmSync(directory, {recursive:true,force:true}); });
+afterAll(() => { db.close(); fs.rmSync(directory, {recursive:true,force:true}); vi.useRealTimers(); });
 function fixture() {
   const n = ++sequence;
   const insert = (sql:string,...args:(string|number)[]) => Number(run(sql,...args).lastInsertRowid);
