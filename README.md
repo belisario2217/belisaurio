@@ -76,6 +76,7 @@ por QR. La vigencia termina al cerrar el ciclo activo, con un máximo de seis me
 
 ## Funcionalidad incluida
 
+- [Control docente por calendario y hora](docs/NOMINA-DOCENTE-CALENDARIO.md): horarios recurrentes por bloques, asistencias y faltas parciales, suspensiones, tarifas con vigencia, abonos parciales y saldo por fechas; integrado con Balance y respaldos JSON.
 - Inicio de sesión, usuarios activos/inactivos, roles y permisos editables.
 - CRUD y desactivación de todos los catálogos principales.
 - Eliminación definitiva con confirmación para alumnos, materias, planes y registros sin dependencias.

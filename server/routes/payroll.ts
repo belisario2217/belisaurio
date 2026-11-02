@@ -5,6 +5,7 @@ import { ApiError, asId, cleanText } from "../utils.js";
 import { sendCsv } from "../utils.js";
 import { isoDate } from "../services/payroll.js";
 import { payrollWithDeductions } from "../services/payroll-adjustments.js";
+import { assertNoTeacherCalendarOverlap } from "../services/teacher-payroll.js";
 
 export const payrollRouter=Router();
 payrollRouter.get('/profiles',requirePermission('payments.view'),(_req,res)=>res.json({profiles:all(`SELECT p.*,t.teacher_number FROM payroll_profiles p LEFT JOIN teachers t ON t.id=p.teacher_id ORDER BY p.kind,spanish_sort(p.full_name)`),teachers:all(`SELECT t.id,t.full_name,t.teacher_number,
@@ -108,6 +109,7 @@ payrollRouter.post('/payments',requirePermission('payments.manage'),(req:Authent
  const p=profile(req.body.profileId),paidAt=isoDate(req.body.paidAt,'Fecha de pago'),notes=cleanText(req.body.notes,500);
  const payment=transaction(()=>{
   const calc=payrollWithDeductions(p,req.body);
+  assertNoTeacherCalendarOverlap(p.id,calc.periodStart,calc.periodEnd);
   if(req.body.expectedAmount!==undefined&&(Number(req.body.expectedAmount)!==calc.amount||Number(req.body.expectedRate)!==calc.rate))throw new ApiError(409,'La tarifa o el cálculo cambió. Revisa el importe antes de pagar.');
   if(get('SELECT id FROM payroll_payments WHERE profile_id=? AND period_start<=? AND period_end>=?',p.id,calc.periodEnd,calc.periodStart))throw new ApiError(409,'Este periodo se cruza con otro pago de la misma persona.');
   const conceptName=p.kind==='teacher'?'Nómina docente':'Nómina administrativa',concept=get<{id:number}>('SELECT id FROM expense_concepts WHERE name=?',conceptName)!;
@@ -129,6 +131,7 @@ payrollRouter.patch('/payments/:id',requirePermission('payments.manage'),(req:Au
   const previous=paymentRow(id);
   if(req.body.expectedOriginalAmount!==undefined&&Number(req.body.expectedOriginalAmount)!==previous.amount)throw new ApiError(409,'El pago fue modificado por otra persona. Actualiza la información.');
   const calc=payrollWithDeductions({id:previous.profile_id,kind:previous.kind,rate:previous.rate,weekly_hours:previous.weekly_hours},req.body,id);
+  assertNoTeacherCalendarOverlap(previous.profile_id,calc.periodStart,calc.periodEnd);
   if(req.body.expectedAmount!==undefined&&(Number(req.body.expectedAmount)!==calc.amount||Number(req.body.expectedRate)!==calc.rate))throw new ApiError(409,'El cálculo cambió. Revisa el importe.');
   if(get('SELECT id FROM payroll_payments WHERE profile_id=? AND id<>? AND period_start<=? AND period_end>=?',
    previous.profile_id,id,calc.periodEnd,calc.periodStart))throw new ApiError(409,'El periodo se cruza con otro pago de esta persona.');
