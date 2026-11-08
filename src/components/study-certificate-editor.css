@@ -1,0 +1,9 @@
+.modal.certificate-editor { min-width:0; max-width:calc(100vw - 40px); }
+.certificate-editor .modal-body { min-width:0; }
+.certificate-editor .modal-actions { flex-wrap:wrap; }
+.certificate-editor :is(input,select) { min-width:0; max-width:100%; }
+.certificate-editor p { overflow-wrap:anywhere; }
+@media(max-width:760px) {
+  .modal.certificate-editor { max-width:100vw; }
+  .certificate-editor .modal-actions .button { flex:1 1 140px; }
+}

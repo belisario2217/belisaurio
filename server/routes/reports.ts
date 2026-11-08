@@ -4,7 +4,7 @@ import { all, get, run, transaction } from "../db.js";
 import { createPdf, pdfTable, sendWorkbook } from "../services/files.js";
 import { syncGroupSubjects } from "../services/group-subjects.js";
 import { getCycleCalendar, syncAcademicSubjectStatuses } from "../services/academic-calendar.js";
-import { sendStudyCertificate } from "../services/study-certificate.js";
+import { sendStudyCertificate, getStudyCertificateData } from "../services/study-certificate.js";
 import { getAcademicRecord } from "../services/academic-record.js";
 import { drawAcademicDocument, printedSubjects, publicAcademicStudent } from "../services/academic-documents.js";
 import { issueDocument, type IssuedDocument } from "../services/document-verification.js";
@@ -294,6 +294,17 @@ reportsRouter.get("/academic-context", requirePermission("reports.generate"), (r
   const record = getAcademicRecord(asId(req.query.studentId, "Alumno"), "report_card");
   res.json({ student: publicAcademicStudent(record.student), calendar: getCycleCalendar(record.student.cycle_id) });
 });
+
+reportsRouter.get("/study-certificate/draft", requirePermission("reports.generate"), (req, res) => {
+  const data = getStudyCertificateData(asId(req.query.studentId, "Alumno"));
+  res.json({ student: { name: data.student.student_name, number: data.student.student_number }, certification: data.certification, draft: data.draft });
+});
+
+for (const format of ["pdf", "docx"] as const) {
+  reportsRouter.post(`/study-certificate.${format}`, requirePermission("reports.generate"), (req: AuthenticatedRequest, res) => {
+    return sendStudyCertificate(res, asId(req.body.studentId, "Alumno"), req.user!.id, req.body.draft, format);
+  });
+}
 
 reportsRouter.get("/study-certificate.pdf", requirePermission("reports.generate"), (req: AuthenticatedRequest, res) => {
   const studentId = asId(req.query.studentId, "Alumno");

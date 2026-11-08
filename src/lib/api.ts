@@ -47,10 +47,13 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return response.json();
 }
 
-export async function download(path: string, filename: string) {
+export async function download(path: string, filename: string, options?: { body: Record<string, unknown> }) {
   const token = getToken();
+  const headers = new Headers(token ? { Authorization: `Bearer ${token}` } : undefined);
+  if (options) headers.set("Content-Type", "application/json");
   const response = await fetch(apiUrl(path), {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    method: options ? "POST" : "GET", headers,
+    body: options ? JSON.stringify(options.body) : undefined
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "No fue posible generar el archivo." }));

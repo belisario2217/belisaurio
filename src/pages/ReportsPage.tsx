@@ -7,6 +7,7 @@ import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
 import { Button, Field, Select } from "../components/Ui";
+import { StudyCertificateEditor } from "../components/StudyCertificateEditor";
 import { Modal } from "../components/Modal";
 import type { OfficialDocumentSnapshot } from "../../shared/official-document";
 
@@ -70,6 +71,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
   const [drafts, setDrafts] = useState<Record<number, CurricularDraft>>({});
   const [groupId, setGroupId] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [certificateStudent, setCertificateStudent] = useState<number | null>(null);
   const [documentBusy, setDocumentBusy] = useState(false);
   const [issuedDocuments, setIssuedDocuments] = useState<IssuedDocumentRow[]>([]);
   const [academicContext, setAcademicContext] = useState<OfficialDocumentSnapshot["student"] | null>(null);
@@ -239,6 +241,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
       toast.error("Selecciona un alumno.");
       return;
     }
+    if (type === "study-certificate") { setCertificateStudent(Number(studentId)); return; }
     emitDocument(`/reports/${type}.pdf?studentId=${studentId}`);
   }
 
@@ -389,6 +392,9 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
 
   return (
     <div className="page-stack">
+      {certificateStudent !== null && <StudyCertificateEditor studentId={certificateStudent} onClose={() => setCertificateStudent(null)} onIssued={() => {
+        api<IssuedDocumentRow[]>(`/reports/issued-documents?studentId=${studentId}`).then(setIssuedDocuments).catch(error => toast.error(error.message));
+      }} />}
       {view === "documents" && <><section className="report-card-builder">
         <div className="report-builder-intro">
           <div className="report-builder-icon"><GraduationCap size={28} /></div>
@@ -410,7 +416,7 @@ export function ReportsPage({ view = "reports" }: { view?: "reports" | "document
         <div className="official-document-options">
           <article><Printer size={24} /><h3>Boleta de calificaciones</h3><p>Solo las asignaturas del semestre actual. Incluye parciales, calificación final y espacios para firma.</p><Button variant="secondary" busy={documentBusy} onClick={() => reportCard("student")}>Emitir boleta</Button></article>
           <article><GraduationCap size={24} /><h3>Historial académico</h3><p>Asignaturas cursadas de semestres anteriores y las del semestre actual, sin materias futuras.</p><Button variant="secondary" busy={documentBusy} onClick={() => studentDocument("academic-history")}>Emitir historial</Button></article>
-          <article><FileText size={24} /><h3>Constancia de estudios</h3><p>Inscripción vigente, semestre actual y calendario del ciclo escolar: inicio, vacaciones y fin.</p><Button variant="secondary" busy={documentBusy} onClick={() => studentDocument("study-certificate")}>Emitir constancia</Button></article>
+          <article><FileText size={24} /><h3>Constancia de estudios</h3><p>Inscripción vigente, semestre actual y calendario del ciclo escolar: inicio, vacaciones y fin.</p><Button variant="secondary" busy={documentBusy} onClick={() => studentDocument("study-certificate")}>Revisar y emitir constancia</Button></article>
         </div>
       </section>
       {studentId && <section className="table-section"><header className="section-heading"><div><span>Validación institucional</span><h2>Documentos emitidos</h2><p>El QR conserva los datos de cada emisión. Revoca un documento cuando deba sustituirse.</p></div></header>

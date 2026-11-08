@@ -7,6 +7,7 @@ import {
 import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
+import { StudyCertificateEditor } from "../components/StudyCertificateEditor";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, Field, Select, StatusBadge } from "../components/Ui";
 
@@ -90,6 +91,7 @@ export function StudentsPage() {
   const { can } = useAuth();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [certificateStudent, setCertificateStudent] = useState<number | null>(null);
   const [records, setRecords] = useState<Student[]>([]);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, pages: 1 });
   const [filters, setFilters] = useState<Filters>(blankFilters);
@@ -412,6 +414,7 @@ export function StudentsPage() {
 
   return (
     <div className="page-stack">
+      {certificateStudent !== null && <StudyCertificateEditor studentId={certificateStudent} onClose={() => setCertificateStudent(null)} />}
       <section className="toolbar">
         <div className="toolbar-primary">
           <div className="search-box"><Search size={18} /><input placeholder="Buscar por nombre o matrícula" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></div>
@@ -463,7 +466,7 @@ export function StudentsPage() {
                           {can("students.manage") && <button onClick={() => toggleFinancialClearance(student)}><BadgeCheck size={16} /> {student.financial_clearance_override ? "Usar cálculo automático" : "Marcar cuenta regularizada"}</button>}
                           {can("students.manage") && <button onClick={() => toggle(student)}><Power size={16} /> {student.is_active ? "Dar de baja" : "Reactivar"}</button>}
                           <button onClick={() => openDocument(`/reports/report-card.pdf?studentId=${student.id}`)}><Printer size={16} /> Generar boleta</button>
-                          <button onClick={() => openDocument(`/reports/study-certificate.pdf?studentId=${student.id}`)}><FileText size={16} /> Generar constancia</button>
+                          <button onClick={() => { setCertificateStudent(student.id); setMenuFor(null); }}><FileText size={16} /> Generar constancia</button>
                           {can("students.manage") && <button className="danger-menu-item" onClick={() => { setDeleting(student); setMenuFor(null); }}><Trash2 size={16} /> Eliminar definitivamente</button>}
                         </div>
                       )}

@@ -70,6 +70,87 @@ function lastIssued(student: number) {
 }
 
 describe("Official documents", () => {
+  it("preloads certificate edits without issuing or modifying academic data", async () => {
+    const f = fixture();
+    const before = getStudyCertificateData(f.student);
+    const response = await request(app).get(`/api/reports/study-certificate/draft?studentId=${f.student}`).set("Authorization", auth).expect(200);
+    expect(response.body.draft.programName).toBe(before.student.program_name);
+    expect(response.body.draft.rvoe).toBe(before.certification.rvoe || "NO REGISTRADO");
+    expect(response.body.draft.startDate).toBe(before.calendar.activity_start);
+    expect(response.body.draft.subjects.map((s: any) => s.name)).toEqual(before.currentSubjects.map(s => s.subject_name));
+    expect(all("SELECT id FROM issued_documents WHERE student_id=?", f.student)).toHaveLength(0);
+    expect(getStudyCertificateData(f.student)).toEqual(before);
+    await request(app).get(`/api/reports/study-certificate/draft?studentId=${f.student}`).expect(401);
+  });
+
+  it("prints edited certificate fields in PDF and its QR snapshot without changing defaults", async () => {
+    const f = fixture(), before = getStudyCertificateData(f.student);
+    const draft = { ...before.draft, programName: "Estudios de Enfermería personalizados", rvoe: "RVOE-EDIT-123",
+      semesterName: "tercer semestre ajustado", modality: "presencial", schedule: "Lunes a Viernes, 8:00 a 14:00",
+      cycleName: "Ciclo especial", startDate: "2026-09-01", endDate: "2027-02-28", documentDate: "2026-11-08",
+      vacations: [{ start_date: "2026-12-20", end_date: "2027-01-05" }], place: "Tabasco",
+      subjectsTitle: "TEMARIO AJUSTADO", subjects: [{ name: "Cuidados integrales", type: "elective" }] };
+    const response = await request(app).post("/api/reports/study-certificate.pdf").set("Authorization", auth)
+      .send({ studentId: f.student, draft }).buffer(true).parse(binary).expect(200);
+    const text = (await pdfPages(response.body)).join(" ");
+    for (const value of [draft.programName, draft.rvoe, draft.semesterName, draft.modality, draft.schedule,
+      draft.cycleName, draft.subjectsTitle, "Cuidados integrales", "8 de Noviembre del 2026", "28 de Febrero del 2027"]) expect(text).toContain(value);
+    expect(text).not.toContain(before.draft.subjects[0].name);
+    const issued = lastIssued(f.student);
+    const verified = await request(app).get(`/api/documents/verify/${issued.token}`).expect(200);
+    expect(verified.body.document.content.certificate).toEqual(draft);
+    expect(verified.body.document.content.certification.rvoe).toBe(draft.rvoe);
+    expect(verified.body.document.student).toMatchObject({ program: draft.programName, cycle: draft.cycleName, semesterName: draft.semesterName });
+    expect(verified.body.document.content.subjects[0]).toMatchObject({ name: "Cuidados integrales", subjectType: "elective" });
+    expect(getStudyCertificateData(f.student)).toEqual(before);
+    const unedited = await download(`/reports/study-certificate.pdf?studentId=${f.student}`);
+    expect((await pdfPages(unedited.body)).join(" ")).not.toContain(draft.programName);
+  });
+
+  it("exports a real editable Word file with letterhead, QR, dates and the selected authority", async () => {
+    for (const authority of ["ifop", "uniten"]) {
+      const f = fixture();
+      run("UPDATE academic_plans SET certificate_authority=? WHERE id=?", authority, f.plan);
+      const draft = { ...getStudyCertificateData(f.student).draft, programName: "Estudios A & B", subjectsTitle: "Temario <vigente>", rvoe: "EDIT-WORD-567" };
+      const response = await request(app).post("/api/reports/study-certificate.docx").set("Authorization", auth)
+        .send({ studentId: f.student, draft }).buffer(true).parse(binary).expect(200);
+      expect(response.headers["content-type"]).toContain("wordprocessingml.document");
+      expect(response.headers["content-disposition"]).toMatch(/\.docx"$/);
+      const zip = await JSZip.loadAsync(response.body), xml = await zip.file("word/document.xml")!.async("string");
+      const issued = lastIssued(f.student);
+      expect(xml).toContain("Estudios A &amp; B"); expect(xml).toContain("Temario &lt;vigente&gt;");
+      expect(xml).toContain(draft.rvoe); expect(xml).toContain(issued.folio);
+      expect(xml).toContain(authority === "ifop" ? "27MSU0108N" : "18PSU0074C");
+      if (authority === "ifop") expect(xml).not.toContain("UNITEN"); else expect(xml).not.toContain("27MSU0108N");
+      expect(await zip.file("word/header1.xml")!.async("string")).toContain("Campus Frontera");
+      expect(await zip.file("word/_rels/document.xml.rels")!.async("string")).toContain(issued.verification_url);
+      let qrUrl: string | undefined;
+      for (const file of Object.values(zip.files).filter(file => /^word\/media\/.*\.png$/.test(file.name))) {
+        const png = PNG.sync.read(await file.async("nodebuffer"));
+        qrUrl ||= decodeQR(new Uint8ClampedArray(png.data), png.width, png.height)?.data;
+      }
+      expect(qrUrl).toBe(issued.verification_url);
+      const verified = await request(app).get(`/api/documents/verify/${issued.token}`).expect(200);
+      expect(verified.body.document.student.program).toBe(draft.programName);
+      expect(verified.body.document.content.certificate).toEqual(draft);
+    }
+  });
+
+  it("rejects invalid edits and unauthorized emission before creating any folio", async () => {
+    const f = fixture();
+    for (const draft of [{ programName: "" }, { programName: "A".repeat(201) }, { startDate: "2026-02-30" },
+      { startDate: "2027-09-01", endDate: "2026-01-01" }, { documentDate: "invalid" },
+      { vacations: [{ start_date: "2000-01-01", end_date: "2000-01-03" }] },
+      { subjects: [{ name: "", type: "mandatory" }] }, { subjects: [{ name: "Test", type: "invalid" }] }, { cct: "INVALID" }]) {
+      await request(app).post("/api/reports/study-certificate.pdf").set("Authorization", auth).send({ studentId: f.student, draft }).expect(400);
+    }
+    for (const format of ["pdf", "docx"]) await request(app).post(`/api/reports/study-certificate.${format}`).send({ studentId: f.student }).expect(401);
+    const teacherId = Number(run("INSERT INTO users(full_name,email,password_hash,role_id) VALUES('Docente de prueba','certificate-teacher@example.invalid','unused',(SELECT id FROM roles WHERE name='Docente'))").lastInsertRowid);
+    const teacherAuth = `Bearer ${signToken(loadUser(teacherId)!)}`;
+    await request(app).post("/api/reports/study-certificate.docx").set("Authorization", teacherAuth).send({ studentId: f.student }).expect(403);
+    expect(all("SELECT id FROM issued_documents WHERE student_id=?", f.student)).toHaveLength(0);
+  });
+
   it("conserva los folios físicos en Cobros, incluso mayores de 1000 y 9999", async () => {
     const f = fixture();
     const folioRecords = ["10000", "0099", "1001", "0002", "9999", "0001"];
