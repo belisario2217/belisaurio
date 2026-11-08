@@ -57,7 +57,7 @@ export async function issueDocument(type: OfficialDocumentType, studentId: numbe
     version: 1, folio, type, title: studentCopy ? "Boleta del alumno" : titles[type], issuedAt,
     institution: { name: settings.institution_name, campus: "Campus Frontera", logoPath: settings.logo_path,
       directorName: studentCopy ? "" : settings.director_name || "Responsable de Control Escolar", address: settings.address || "", footer: settings.footer_text || "" },
-    student: { ...student, program: displayProgramName(student.program) }, content
+    student: { ...student, program: type === "study_certificate" && content.certificate ? student.program : displayProgramName(student.program) }, content
   };
   const json = JSON.stringify(snapshot);
   const fingerprint = crypto.createHash("sha256").update(json).digest("hex");
