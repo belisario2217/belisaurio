@@ -16,7 +16,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "docx": "^9.15.3",
+    "docx": "9.15.3",
     "dotenv": "^16.5.0",
     "exceljs": "^4.4.0",
     "express": "^5.1.0",

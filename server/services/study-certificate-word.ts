@@ -1,4 +1,6 @@
-import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ApiError } from "../utils.js";
 import sharp from "sharp";
 import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, ImageRun,
@@ -25,7 +27,15 @@ export async function createStudyCertificateWord(data: StudyCertificateData, iss
     insideHorizontal: { style: BorderStyle.NONE }, insideVertical: { style: BorderStyle.NONE } };
   const header: Paragraph[] = [];
   if (brand.logo) {
-    const logo = await sharp(await fs.readFile(brand.logo)).resize(128, 128, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    // Word may embed only institutional assets or files in the configured uploads directory.
+    const logoPath = path.resolve(brand.logo);
+    const allowedRoots = [fileURLToPath(new URL("../../public/assets/", import.meta.url)),
+      path.resolve(process.env.UPLOADS_PATH || fileURLToPath(new URL("../../uploads/", import.meta.url)))];
+    if (!allowedRoots.some(root => {
+      const relative = path.relative(root, logoPath);
+      return relative !== "" && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    })) throw new ApiError(409, "Vuelve a cargar el logo institucional desde Configuración para descargar la constancia en Word.");
+    const logo = await sharp(logoPath).resize(128, 128, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
     const metadata = await sharp(logo).metadata();
     header.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: "png", data: logo,
       transformation: { width: (metadata.width || 128) / 2, height: (metadata.height || 128) / 2 },
