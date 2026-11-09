@@ -4,6 +4,7 @@ import { all, get, run, transaction } from "../db.js";
 import { syncEnrollmentGroupSubjects } from "../services/group-subjects.js";
 import { planMatchesProgram } from "../services/student-identity.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
+import { attendanceListData, sendAttendanceListPdf, sendAttendanceListWorkbook } from "../services/attendance-lists.js";
 import { ApiError, asId } from "../utils.js";
 
 export const groupManagementRouter = Router();
@@ -94,6 +95,20 @@ groupManagementRouter.get("/", requirePermission("students.view"), (_req, res) =
     periods: all("SELECT id, name, sequence FROM curricular_periods WHERE is_active = 1 ORDER BY sequence")
   });
 });
+
+groupManagementRouter.get("/:id/attendance-list", requirePermission("students.view"), requirePermission("reports.generate"), (req, res) => {
+  const data = attendanceListData(asId(req.params.id, "Grupo"), asId(req.query.semester, "Semestre"),
+    req.query.subjectId ? asId(req.query.subjectId, "Materia") : undefined);
+  res.json(data.options);
+});
+
+for (const format of ["pdf", "xlsx"] as const) {
+  groupManagementRouter.get(`/:id/attendance-list.${format}`, requirePermission("students.view"), requirePermission("reports.generate"), (req, res) => {
+    const data = attendanceListData(asId(req.params.id, "Grupo"), asId(req.query.semester, "Semestre"),
+      req.query.subjectId ? asId(req.query.subjectId, "Materia") : undefined);
+    return format === "pdf" ? sendAttendanceListPdf(res, data) : sendAttendanceListWorkbook(res, data);
+  });
+}
 
 groupManagementRouter.get("/:id", requirePermission("students.view"), (req, res) => {
   const id = asId(req.params.id, "Grupo");

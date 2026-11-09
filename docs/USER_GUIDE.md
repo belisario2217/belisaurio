@@ -71,8 +71,11 @@ consultan y corrigen desde **Cobros**.
 ## Autorización para evaluar
 
 La captura docente requiere el pago de inscripción o reinscripción del semestre.
-No se solicita asistencia. Las funciones Asistencia y Folios fueron retiradas;
-los pagos y los datos históricos se conservan.
+No se solicita asistencia. La captura digital de Asistencia y la sección Folios fueron
+retiradas; los pagos y los datos históricos se conservan. Para pasar lista en papel,
+**Administración de grupos → Descargar listas de asistencia** permite filtrar por grupo,
+semestre y materia y descargar PDF o Excel. El bloque está al inicio de la página,
+también en el celular.
 
 ## Promoción al semestre siguiente
 

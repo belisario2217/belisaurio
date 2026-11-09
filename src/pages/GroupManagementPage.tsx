@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowUpCircle, BookOpenCheck, CalendarRange, CheckCircle2, GraduationCap, Save, Search, School, UsersRound } from "lucide-react";
 import { Button, EmptyState, Field, Select, StatusBadge } from "../components/Ui";
+import { AttendanceListDownloads } from "../components/AttendanceListDownloads";
 import { useToast } from "../components/Toast";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -206,6 +207,8 @@ export function GroupManagementPage() {
         <div><span>Control académico por grupo</span><h2>Administración de grupos</h2><p>Consulta su matrícula y establece el plan y ciclo escolar que cursan actualmente.</p></div>
         <div className="group-admin-total"><strong>{groups.reduce((total, group) => total + Number(group.student_count), 0)}</strong><span>alumnos inscritos</span></div>
       </section>
+
+      {can("reports.generate") && <AttendanceListDownloads groups={groups} periods={periods} defaultGroupId={selectedId} />}
 
       <section className="group-admin-layout">
         <aside className="group-admin-pane">
