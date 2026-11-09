@@ -1,0 +1,17 @@
+.attendance-list-downloads { min-width:0; margin:18px 0; padding:22px; border:1px solid #dae4f4; border-radius:22px; background:linear-gradient(120deg,#fff,#f1f5ff); }
+.attendance-list-downloads header { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+.attendance-list-icon { display:grid; flex:0 0 44px; height:44px; place-items:center; border-radius:14px; color:#3c50c5; background:#e8edff; }
+.attendance-list-downloads h2 { color:var(--navy); font-size:18px; }
+.attendance-list-downloads p { margin-top:7px; line-height:1.6; color:var(--muted); }
+.attendance-list-filters { display:grid; grid-template-columns:1fr 1fr 1.5fr; gap:14px; }
+.attendance-list-filters :is(.field,select) { min-width:0; max-width:100%; }
+.attendance-list-summary { margin:15px 0; color:var(--navy); font-size:12px; overflow-wrap:anywhere; }
+.attendance-list-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.attendance-list-downloads .attendance-list-help { font-size:11px; }
+@media(max-width:760px) {
+ .attendance-list-downloads { padding:18px; }
+ .attendance-list-filters { grid-template-columns:minmax(0,1fr); }
+ .attendance-list-actions .button { flex:1 1 170px; min-width:0; white-space:normal; }
+ .attendance-list-downloads header { align-items:flex-start; }
+ .attendance-list-downloads h2 { font-size:16px; }
+}
