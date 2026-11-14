@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import { opendir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
@@ -46,6 +47,14 @@ async function pdfPages(buffer: Buffer) {
     expect(result.error).toBeUndefined();
     return result.pages.map((page: any) => page.matrix.flat().join(" ").replace(/\s+/g, " ")) as string[];
   } finally { await worker.terminate(); }
+}
+async function statementTemporaryFolders() {
+  const folders: string[] = [];
+  const entries = await opendir(temporaryRoot);
+  for await (const entry of entries) {
+    if (entry.isDirectory() && entry.name.startsWith("ifop-statements-")) folders.push(entry.name);
+  }
+  return folders;
 }
 afterAll(() => { db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
 
@@ -127,7 +136,7 @@ describe("Bulk account statements", () => {
   });
   it("cancels work and removes temporary files when the client disconnects", async () => {
     const f = fixture(30);
-    const existing = new Set(fs.readdirSync(temporaryRoot).filter(name => name.startsWith('ifop-statements-')));
+    const existing = new Set(await statementTemporaryFolders());
     const interrupted = download(`&groupId=${f.group}`);
     const pending = interrupted.then(() => undefined, () => undefined);
     for (let i = 0; i < 100; i++) {
@@ -144,7 +153,7 @@ describe("Bulk account statements", () => {
     expect(response?.status).toBe(200);
     let remaining: string[] = [];
     for (let i = 0; i < 30; i++) {
-      remaining = fs.readdirSync(temporaryRoot).filter(name => name.startsWith('ifop-statements-') && !existing.has(name));
+      remaining = (await statementTemporaryFolders()).filter(name => !existing.has(name));
       if (!remaining.length) break;
       await new Promise(resolve => setTimeout(resolve, 20));
     }
