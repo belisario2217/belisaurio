@@ -14,6 +14,7 @@ import { ApiError, asId, asNumber, cleanText, optionalText, sendCsv } from "../u
 import { normalizePhysicalFolio } from "../services/physical-folio.js";
 import { promotionEligibility } from "../services/promotion-eligibility.js";
 import multer from "multer";
+import { sendBulkAccountStatements, statementBatchRoster } from "../services/account-statement-batch.js";
 import { issueDocument } from "../services/document-verification.js";
 
 export const paymentsRouter = Router();
@@ -296,10 +297,21 @@ function academicProgress(account: StudentAccount) {
   };
 }
 
+function accountBilling(account: StudentAccount, throughMonth?: string) {
+  const billing = buildBilling(account);
+  if (throughMonth) {
+    const lastDay = `${throughMonth}-31`;
+    billing.payments = billing.payments.filter((payment) => payment.paid_at <= lastDay);
+    billing.summary.paidAmount = Number(billing.payments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2));
+    billing.summary.paidInstallments = billing.payments.filter((payment) => payment.concept_type === "tuition").length;
+  }
+  return billing;
+}
+
 function fullAccount(studentId: number, throughMonth?: string) {
   const account = getStudentAccount(studentId);
   if (!account) throw new ApiError(404, "No se encontro una inscripcion activa para este alumno.");
-  const billing = buildBilling(account);
+  const billing = accountBilling(account, throughMonth);
   const manualRegistration = get<{ status: string; paid_at: string | null; physical_folio: string | null; period_number: number }>(
     "SELECT status, paid_at, physical_folio, period_number FROM student_registration_status WHERE enrollment_id = ? AND period_number = ?",
     account.enrollmentId ?? -1,
@@ -317,12 +329,7 @@ function fullAccount(studentId: number, throughMonth?: string) {
   const registration = manualRegistration
     ? { paid: manualRegistration.status === "paid" ? 1 : 0, paid_at: manualRegistration.paid_at, concept: "Registro administrativo", registration_period_number: manualRegistration.period_number }
     : paymentRegistration;
-  if (throughMonth) {
-    const lastDay = `${throughMonth}-31`;
-    billing.payments = billing.payments.filter((payment) => payment.paid_at <= lastDay);
-    billing.summary.paidAmount = Number(billing.payments.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2));
-    billing.summary.paidInstallments = billing.payments.filter((payment) => payment.concept_type === "tuition").length;
-  }
+
   return {
     student: account,
     progress: academicProgress(account),
@@ -926,18 +933,19 @@ paymentsRouter.get("/student/:id", requirePermission("payments.view"), (req, res
   res.json(fullAccount(asId(req.params.id, "Alumno"), throughMonth));
 });
 
-paymentsRouter.get("/student/:id/statement", requirePermission("payments.export"), async (req: AuthenticatedRequest, res) => {
-  const throughMonth = req.query.throughMonth ? validMonth(req.query.throughMonth) : undefined;
-  const studentId = asId(req.params.id, "Alumno");
-  const data = fullAccount(studentId, throughMonth);
-  const format = cleanText(req.query.format || "pdf", 10).toLowerCase();
-  if (!["pdf", "xlsx"].includes(format)) throw new ApiError(400, "El formato del estado de cuenta debe ser PDF o XLSX.");
-  const settings = statementSettings();
+function accountStatementData(studentId: number, throughMonth?: string) {
+  const student = getStudentAccount(studentId);
+  if (!student) throw new ApiError(404, "No se encontró una inscripción activa para este alumno.");
+  const data = { student, billing: accountBilling(student, throughMonth) };
   const cycle = get<{name:string}>(`SELECT sc.name FROM enrollments e JOIN groups g ON g.id = e.group_id
     JOIN institution_settings i ON i.id = 1 JOIN school_cycles sc ON sc.id = COALESCE(g.active_cycle_id, i.active_cycle_id, e.cycle_id)
     WHERE e.student_id = ? AND e.is_active = 1 ORDER BY e.id DESC LIMIT 1`, studentId);
   if (cycle) data.student.cycle_name = cycle.name;
-  const issued = await issueDocument("account_statement", studentId, req.user!.id, {
+  return data;
+}
+
+async function issueAccountStatement(studentId: number, issuedBy: number, data: ReturnType<typeof accountStatementData>) {
+  return issueDocument("account_statement", studentId, issuedBy, {
     name: data.student.student_name, number: data.student.student_number, program: data.student.program_name,
     group: data.student.group_name, shift: data.student.shift_name, semester: data.student.currentPeriodNumber,
     semesterName: data.student.current_period || "Sin semestre registrado", cycle: data.student.cycle_name
@@ -945,8 +953,43 @@ paymentsRouter.get("/student/:id/statement", requirePermission("payments.export"
     date: payment.paid_at, concept: payment.concept, amount: payment.amount,
     folio: physicalFolio(payment.notes)
   })) });
-  if (format === "xlsx") return sendAccountStatementWorkbook(res, data, settings, issued);
-  return sendAccountStatementPdf(res, data, settings, issued);
+}
+
+paymentsRouter.get("/student/:id/statement", requirePermission("payments.export"), async (req: AuthenticatedRequest, res) => {
+  const throughMonth = req.query.throughMonth ? validMonth(req.query.throughMonth) : undefined;
+  const studentId = asId(req.params.id, "Alumno");
+  const format = cleanText(req.query.format || "pdf", 10).toLowerCase();
+  if (!["pdf", "xlsx"].includes(format)) throw new ApiError(400, "El formato del estado de cuenta debe ser PDF o XLSX.");
+  const data = accountStatementData(studentId, throughMonth);
+  const issued = await issueAccountStatement(studentId, req.user!.id, data);
+  if (format === "xlsx") return sendAccountStatementWorkbook(res, data, statementSettings(), issued);
+  return sendAccountStatementPdf(res, data, statementSettings(), issued);
+});
+
+paymentsRouter.get("/statement-options", requirePermission("payments.export"), (_req, res) => {
+  const roster = statementBatchRoster();
+  const groups = new Map<number, { id: number; name: string; studentCount: number }>();
+  for (const student of roster) {
+    const group = groups.get(student.group_id) ?? { id: student.group_id, name: student.group_name, studentCount: 0 };
+    group.studentCount++; groups.set(group.id, group);
+  }
+  res.json({ studentCount: roster.length, groups: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "es-MX", { numeric: true })) });
+});
+
+paymentsRouter.get("/statements.pdf", requirePermission("payments.export"), async (req: AuthenticatedRequest, res) => {
+  if (typeof req.query.throughMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.throughMonth)) {
+    throw new ApiError(400, "Selecciona un mes válido para la descarga conjunta.");
+  }
+  const throughMonth = req.query.throughMonth;
+  const groupId = req.query.groupId ? asId(req.query.groupId, "Grupo") : undefined;
+  const roster = statementBatchRoster(groupId);
+  if (!roster.length) throw new ApiError(409, "No hay alumnos activos con inscripción vigente para esta descarga.");
+  return sendBulkAccountStatements(res, roster.map(student => student.id), statementSettings(),
+    `estados-de-cuenta-${groupId ? `grupo-${groupId}` : "todos"}-${throughMonth}.pdf`, async studentId => {
+      const data = accountStatementData(studentId, throughMonth);
+      const official = await issueAccountStatement(studentId, req.user!.id, data);
+      return { data, official };
+    });
 });
 
 paymentsRouter.get("/report", requirePermission("payments.export"), (req, res) => {

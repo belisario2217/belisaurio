@@ -135,3 +135,32 @@ API administrativa (`reports.generate`): `GET /api/reports/study-certificate/dra
 precarga sin emitir; `POST /api/reports/study-certificate.pdf` y `.docx` reciben
 `{ studentId, draft }`. El GET anterior de PDF sigue disponible con valores predeterminados.
 El generador Word se importa únicamente cuando se solicita ese formato.
+
+## Estados de cuenta por grupo o de todos los alumnos
+
+En **Cobros → Descargar estados de cuenta por grupo o de todos los alumnos** elige
+**Todos los alumnos activos** o un grupo y el mes límite de pagos. Pulsa
+**Descargar estados de cuenta PDF**. La selección es independiente del buscador de
+alumnos y del reporte mensual de ingresos. Se incluyen todas las cuentas elegibles,
+sin el límite de 20 resultados del buscador, incluso alumnos sin pagos.
+
+Se genera un solo PDF con el formato de cada estado individual: membrete, movimientos,
+folios físicos, total pagado, firma y QR propio. Los alumnos se ordenan por grupo y
+apellidos; cada uno comienza en una hoja nueva y conserva la paginación de sus movimientos.
+El mes elegido incluye pagos hasta ese mes y todos los anteriores. No cambia las reglas
+de contabilización de pagos ni los saldos del sistema. Las descargas individuales PDF y
+Excel siguen disponibles al seleccionar un alumno.
+
+Se consideran alumnos activos con inscripción activa; cuando existen varias, se utiliza
+la última, por lo que un alumno aparece una sola vez y en su grupo vigente. El selector
+muestra los grupos con alumnos elegibles y su cantidad. Cada emisión genera un folio y
+registro de validación por alumno con exactamente sus movimientos y total impreso.
+
+La plataforma prepara un alumno a la vez y un solo lote a la vez. El PDF se escribe en
+un archivo temporal privado y se descarga únicamente cuando está completo. Se elimina
+tras el envío o si se cancela la conexión. Una segunda preparación simultánea solicita
+esperar y reintentar; las demás operaciones de la plataforma continúan disponibles.
+
+Permiso: `payments.export`. `GET /api/payments/statement-options` devuelve grupos y
+cantidades sin depender del permiso de catálogos. `GET /api/payments/statements.pdf`
+recibe `throughMonth=AAAA-MM` y opcionalmente `groupId`.
