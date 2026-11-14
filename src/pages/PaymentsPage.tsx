@@ -3,6 +3,7 @@ import { Banknote, CalendarDays, Download, FileSpreadsheet, Pencil, Plus, Receip
 import { api, download, openDocument } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../components/Toast";
+import { BulkAccountStatements } from "../components/BulkAccountStatements";
 import { Modal } from "../components/Modal";
 import { Button, EmptyState, Field, Select } from "../components/Ui";
 
@@ -268,6 +269,8 @@ export function PaymentsPage() {
           <Button type="button" variant="secondary" icon={<FileSpreadsheet size={17} />} onClick={() => download(`/payments/report?${reportQuery}&format=xlsx`, `estado-de-cuenta-${reportMonth}.xlsx`)}>Excel</Button>
         </div>
       </section>
+
+      {can("payments.export") && <BulkAccountStatements />}
 
       <section className="payment-search-results">
         {students.map((student) => (

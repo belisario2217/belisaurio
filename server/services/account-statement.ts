@@ -301,29 +301,26 @@ export function sendAccountStatementPdf(
   settings: StatementInstitutionSettings,
   official: IssuedDocument
 ) {
+  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margins: { top: 36, bottom: 12, left: 36, right: 36 }, bufferPages: true }, false);
+  doc.info.Author = settings.institution_name; doc.info.Title = "Estado de cuenta del alumno";
+  drawAccountStatementPages(doc, data, settings, official);
+  doc.end();
+}
+
+/** Draw into the current page; every subsequent student starts on a fresh page. */
+export function drawAccountStatementPages(
+  doc: PDFKit.PDFDocument, data: StatementAccountData, settings: StatementInstitutionSettings, official: IssuedDocument
+) {
   const issued = localIssuedParts(new Date(official.issuedAt));
   const code = `EC-${official.fingerprint.toUpperCase()}`;
   const primary = normalizedHex(settings.primary_color, "#17324D");
-  const doc = createPdf(res, `estado-de-cuenta-${data.student.student_number}.pdf`, { margins: { top: 36, bottom: 12, left: 36, right: 36 }, bufferPages: true }, false);
-  doc.info.Author = settings.institution_name; doc.info.Title = "Estado de cuenta del alumno";
   const payments = data.billing.payments;
   const pageCount = Math.max(1, Math.ceil(payments.length / rowsPerPdfPage));
   for (let page = 0; page < pageCount; page += 1) {
     if (page > 0) doc.addPage({ size: "LETTER", margins: { top: 36, bottom: 12, left: 36, right: 36 } });
-    drawPdfMovements(
-      doc,
-      data,
-      settings,
-      issued,
-      code,
-      primary,
-      payments.slice(page * rowsPerPdfPage, (page + 1) * rowsPerPdfPage),
-      page + 1,
-      pageCount,
-      official
-    );
+    drawPdfMovements(doc, data, settings, issued, code, primary,
+      payments.slice(page * rowsPerPdfPage, (page + 1) * rowsPerPdfPage), page + 1, pageCount, official);
   }
-  doc.end();
 }
 
 function argb(hex: string) {
