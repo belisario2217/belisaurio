@@ -977,10 +977,12 @@ paymentsRouter.get("/statement-options", requirePermission("payments.export"), (
 });
 
 paymentsRouter.get("/statements.pdf", requirePermission("payments.export"), async (req: AuthenticatedRequest, res) => {
-  if (typeof req.query.throughMonth !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.throughMonth)) {
+  const throughMonth = req.query.throughMonth;
+  if (typeof throughMonth !== "string" || throughMonth.length !== 7 || throughMonth[4] !== "-"
+    || [...throughMonth.slice(0, 4), ...throughMonth.slice(5)].some(char => char < "0" || char > "9")
+    || Number(throughMonth.slice(5)) < 1 || Number(throughMonth.slice(5)) > 12) {
     throw new ApiError(400, "Selecciona un mes válido para la descarga conjunta.");
   }
-  const throughMonth = req.query.throughMonth;
   const groupId = req.query.groupId ? asId(req.query.groupId, "Grupo") : undefined;
   const roster = statementBatchRoster(groupId);
   if (!roster.length) throw new ApiError(409, "No hay alumnos activos con inscripción vigente para esta descarga.");

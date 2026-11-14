@@ -5,7 +5,8 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import request from "supertest";
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), "ifop-bulk-statements-test-"));
+const temporaryRoot = os.tmpdir();
+const directory = fs.mkdtempSync(path.join(temporaryRoot, "ifop-bulk-statements-test-"));
 process.env.DATABASE_PATH = path.join(directory, "school.db");
 process.env.JWT_SECRET = "synthetic-bulk-statements-test";
 const { app } = await import("./app.js");
@@ -126,7 +127,7 @@ describe("Bulk account statements", () => {
   });
   it("cancels work and removes temporary files when the client disconnects", async () => {
     const f = fixture(30);
-    const existing = new Set(fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('ifop-statements-')));
+    const existing = new Set(fs.readdirSync(temporaryRoot).filter(name => name.startsWith('ifop-statements-')));
     const interrupted = download(`&groupId=${f.group}`);
     const pending = interrupted.then(() => undefined, () => undefined);
     for (let i = 0; i < 100; i++) {
@@ -143,7 +144,7 @@ describe("Bulk account statements", () => {
     expect(response?.status).toBe(200);
     let remaining: string[] = [];
     for (let i = 0; i < 30; i++) {
-      remaining = fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('ifop-statements-') && !existing.has(name));
+      remaining = fs.readdirSync(temporaryRoot).filter(name => name.startsWith('ifop-statements-') && !existing.has(name));
       if (!remaining.length) break;
       await new Promise(resolve => setTimeout(resolve, 20));
     }
